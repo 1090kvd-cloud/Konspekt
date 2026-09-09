@@ -44,9 +44,9 @@ object Export {
                 manager.print(
                     jobName,
                     adapter,
+                    // Поля не задаём: система подставит поля принтера.
                     PrintAttributes.Builder()
                         .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
-                        .setMinMargins(PrintAttributes.Margins.DEFAULT_MARGINS)
                         .build()
                 )
                 printView = null
