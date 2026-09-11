@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import ru.vzvod.konspekt.data.Materials
+import ru.vzvod.konspekt.logic.DocxWriter
 import ru.vzvod.konspekt.logic.Renderer
 import ru.vzvod.konspekt.model.LessonPlan
 import ru.vzvod.konspekt.model.Settings
@@ -83,16 +84,16 @@ fun ResultScreen(
         }
     }
 
-    // Word открывает html с этим типом как обычный документ и позволяет его править.
+    // Настоящий .docx: открывается и Word, и мобильными офисами, разметка не лезет наружу.
     val saveLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/msword")
+        ActivityResultContracts.CreateDocument(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
     ) { uri ->
         if (uri != null) {
             runCatching {
                 context.contentResolver.openOutputStream(uri)?.use {
-                    // Метка BOM: по ней Word и мобильные офисы опознают UTF-8 без вопросов.
-                    it.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
-                    it.write(Renderer.html(plan, settings).toByteArray(Charsets.UTF_8))
+                    DocxWriter.write(it, plan, settings)
                 }
             }
         }
@@ -156,7 +157,7 @@ fun ResultScreen(
                         Export.share(context, Renderer.fileName(plan), currentText())
                     }
                     ActionButton(Icons.Filled.Description, "Word") {
-                        saveLauncher.launch(Renderer.fileName(plan) + ".doc")
+                        saveLauncher.launch(Renderer.fileName(plan) + ".docx")
                     }
                     ActionButton(Icons.Filled.Print, "PDF") {
                         Export.printPdf(

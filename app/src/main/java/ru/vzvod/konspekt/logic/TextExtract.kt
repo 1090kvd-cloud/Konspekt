@@ -163,7 +163,7 @@ object TextExtract {
     // --- вспомогательное ---
 
     /** Методички ходят и в UTF-8, и в windows-1251. Пробуем строго, потом откатываемся. */
-    private fun readAsText(bytes: ByteArray): String {
+    fun readAsText(bytes: ByteArray): String {
         val body = if (bytes.size >= 3 &&
             bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()
         ) bytes.copyOfRange(3, bytes.size) else bytes

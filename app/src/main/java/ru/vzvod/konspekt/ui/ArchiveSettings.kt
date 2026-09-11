@@ -361,15 +361,22 @@ private fun LibrarySection() {
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
+            // Блокнот на компьютере дописывает метку BOM, а редакторы сохраняют в cp1251 —
+            // читаем байтами и разбираемся с кодировкой сами, иначе JSON не разберётся.
             val text = runCatching {
-                context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                context.contentResolver.openInputStream(uri)?.use {
+                    TextExtract.readAsText(it.readBytes())
+                }
             }.getOrNull()
             status = if (text == null) {
                 "Не удалось прочитать файл"
             } else {
                 Library.install(context, text, "файл на телефоне").fold(
                     onSuccess = { "Загружено предметов: $it" },
-                    onFailure = { it.message ?: "Файл не подошёл" }
+                    onFailure = {
+                        (it.message ?: "Файл не подошёл") +
+                            ". Нужен файл библиотеки — тот, что даёт кнопка «Сохранить файл»"
+                    }
                 )
             }
         }
