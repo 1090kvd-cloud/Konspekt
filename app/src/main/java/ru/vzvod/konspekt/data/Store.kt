@@ -73,7 +73,11 @@ class Store(context: Context) {
 
     private fun load() {
         runCatching {
-            if (!file.exists()) return
+            if (!file.exists()) {
+                // Первый запуск: кладём показательный конспект, чтобы было что открыть.
+                archive.add(DemoLesson.build())
+                return
+            }
             val root = JSONObject(file.readText())
             val s = root.optJSONObject("settings")
             if (s != null) {
@@ -115,67 +119,7 @@ class Store(context: Context) {
         }
     }
 
-    private fun toJson(i: LessonInput) = JSONObject()
-        .put("id", i.id)
-        .put("createdAt", i.createdAt)
-        .put("disciplineId", i.disciplineId)
-        .put("topic", i.topic)
-        .put("themeNo", i.themeNo)
-        .put("lessonNo", i.lessonNo)
-        .put("lessonTitle", i.lessonTitle)
-        .put("timeLabel", i.timeLabel)
-        .put("minutes", i.minutes)
-        .put("place", i.place)
-        .put("method", i.method)
-        .put("unitName", i.unitName)
-        .put("date", i.date)
-        .put("leader", i.leader)
-        .put("questionCount", i.questionCount)
-        .put("customQuestions", JSONArray(i.customQuestions))
-        .put("includeHandout", i.includeHandout)
-        .put("includeControl", i.includeControl)
-        .put("includeSafety", i.includeSafety)
-        .put("note", i.note)
-        .put("edits", JSONObject(i.edits))
+    private fun toJson(i: LessonInput) = LessonJson.write(i)
 
-    private fun readEdits(o: JSONObject?): Map<String, String> {
-        if (o == null) return emptyMap()
-        val out = HashMap<String, String>()
-        val it = o.keys()
-        while (it.hasNext()) {
-            val k = it.next()
-            val v = o.optString(k, "")
-            if (v.isNotBlank()) out[k] = v
-        }
-        return out
-    }
-
-    private fun fromJson(o: JSONObject): LessonInput {
-        val cq = o.optJSONArray("customQuestions") ?: JSONArray()
-        val list = ArrayList<String>(cq.length())
-        for (k in 0 until cq.length()) list.add(cq.optString(k, ""))
-        return LessonInput(
-            id = o.optString("id", System.nanoTime().toString()),
-            createdAt = o.optLong("createdAt", System.currentTimeMillis()),
-            disciplineId = o.optString("disciplineId", "general"),
-            topic = o.optString("topic", ""),
-            themeNo = o.optString("themeNo", "1"),
-            lessonNo = o.optString("lessonNo", "1"),
-            lessonTitle = o.optString("lessonTitle", ""),
-            timeLabel = o.optString("timeLabel", ""),
-            minutes = o.optInt("minutes", 90),
-            place = o.optString("place", ""),
-            method = o.optString("method", ""),
-            unitName = o.optString("unitName", ""),
-            date = o.optString("date", ""),
-            leader = o.optString("leader", ""),
-            questionCount = o.optInt("questionCount", 3),
-            customQuestions = list.filter { it.isNotBlank() },
-            includeHandout = o.optBoolean("includeHandout", true),
-            includeControl = o.optBoolean("includeControl", true),
-            includeSafety = o.optBoolean("includeSafety", true),
-            note = o.optString("note", ""),
-            edits = readEdits(o.optJSONObject("edits"))
-        )
-    }
+    private fun fromJson(o: JSONObject) = LessonJson.read(o)
 }

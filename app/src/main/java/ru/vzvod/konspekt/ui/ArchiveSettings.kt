@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import ru.vzvod.konspekt.data.LessonsJson
 import ru.vzvod.konspekt.data.Library
 import ru.vzvod.konspekt.data.Materials
 import ru.vzvod.konspekt.logic.LessonImport
@@ -80,6 +81,24 @@ fun ArchiveScreen(
                     val notes = ArrayList<String>()
                     uris.forEach { uri ->
                         val name = Materials.nameOf(context, uri)
+                        val raw = runCatching {
+                            context.contentResolver.openInputStream(uri)?.use {
+                                TextExtract.readAsText(it.readBytes())
+                            }
+                        }.getOrNull()
+
+                        // Файл базы конспектов узнаём по содержимому, а не по расширению.
+                        if (raw != null && LessonsJson.looksLikeLessons(raw)) {
+                            runCatching { LessonsJson.decode(raw) }.fold(
+                                onSuccess = {
+                                    lessons.addAll(it)
+                                    notes.add("$name — база конспектов: ${it.size}")
+                                },
+                                onFailure = { notes.add("$name — ${it.message}") }
+                            )
+                            return@forEach
+                        }
+
                         when (val t = TextExtract.fromUri(context, uri, name)) {
                             is TextExtract.Result.Unsupported -> notes.add("$name — ${t.reason}")
                             is TextExtract.Result.Ok -> {
@@ -99,6 +118,19 @@ fun ArchiveScreen(
                         result.second.take(4).joinToString("; ")
                 }
             }
+        }
+    }
+
+    val exporter = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            importNote = runCatching {
+                context.contentResolver.openOutputStream(uri)?.use {
+                    it.write(LessonsJson.encode(items).toByteArray())
+                }
+                "Выгружено конспектов: ${items.size}"
+            }.getOrElse { "Не удалось сохранить файл" }
         }
     }
 
@@ -148,6 +180,9 @@ fun ArchiveScreen(
         Row(Modifier.padding(start = 8.dp, end = 8.dp)) {
             TextButton(onClick = { importer.launch(arrayOf("*/*")) }) {
                 Text("Загрузить из файлов")
+            }
+            TextButton(onClick = { exporter.launch("konspekty.json") }) {
+                Text("Выгрузить базу")
             }
         }
         if (importNote.isNotBlank()) {
