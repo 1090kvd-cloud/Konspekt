@@ -91,6 +91,8 @@ data class LessonPlan(
     val intro: Stage,
     val questions: List<QuestionBlock>,
     val outro: Stage,
+    /** Раздатка: собирается из вписанного руководителем содержания, может быть пустой. */
+    val handout: List<HandoutBlock>,
     val control: List<String>
 ) {
     val mainMinutes: Int get() = questions.sumOf { it.minutes }

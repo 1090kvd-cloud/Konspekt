@@ -90,6 +90,12 @@ object Generator {
             )
         }
 
+        // Контрольные вопросы нужны и раздатке, поэтому считаем их заранее.
+        val control = list(
+            Keys.CONTROL,
+            if (input.includeControl) d.control.map(::t).take(4) else emptyList()
+        )
+
         return LessonPlan(
             input = input,
             disciplineName = d.name,
@@ -106,7 +112,7 @@ object Generator {
             questions = questions,
             outro = outro,
             handout = if (input.includeHandout) handout(topic, questions, control) else emptyList(),
-            control = list(Keys.CONTROL, if (input.includeControl) d.control.map(::t).take(4) else emptyList())
+            control = control
         )
     }
 
