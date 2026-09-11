@@ -11,8 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -35,9 +35,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import ru.vzvod.konspekt.data.Disciplines
+import ru.vzvod.konspekt.data.Library
 import ru.vzvod.konspekt.logic.Generator
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
@@ -45,9 +44,10 @@ import ru.vzvod.konspekt.logic.Generator
 fun CreateScreen(
     form: FormState,
     onBuild: () -> Unit,
+    onSeries: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val discipline = Disciplines.byId(form.disciplineId)
+    val discipline = Library.byId(form.disciplineId)
     var showDetails by remember { mutableStateOf(false) }
 
     Column(
@@ -60,7 +60,7 @@ fun CreateScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Disciplines.all.forEach { d ->
+                Library.all.forEach { d ->
                     FilterChip(
                         selected = d.id == form.disciplineId,
                         onClick = { form.disciplineId = d.id },
@@ -70,14 +70,43 @@ fun CreateScreen(
             }
         }
 
-        Section("Тема занятия", "Пишите так, как тема стоит в расписании") {
+        Section("Тема занятия", "Идёт в документ строкой «ТЕМА N:»") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = form.themeNo,
+                    onValueChange = { form.themeNo = it },
+                    label = { Text("Тема №") },
+                    singleLine = true,
+                    modifier = Modifier.width(104.dp)
+                )
+                Spacer(Modifier.size(10.dp))
+                OutlinedTextField(
+                    value = form.lessonNo,
+                    onValueChange = { form.lessonNo = it },
+                    label = { Text("Занятие №") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Spacer(Modifier.height(10.dp))
             OutlinedTextField(
                 value = form.topic,
                 onValueChange = { form.topic = it },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Например: Действия солдата в обороне") },
+                label = { Text("Тема") },
+                placeholder = { Text("Материальная часть автомата, ручных гранат, боеприпасы") },
                 minLines = 2,
                 textStyle = MaterialTheme.typography.bodyLarge
+            )
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                value = form.lessonTitle,
+                onValueChange = { form.lessonTitle = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Название занятия (необязательно)") },
+                placeholder = { Text("Пусто — соберётся из учебных вопросов") },
+                minLines = 2,
+                textStyle = MaterialTheme.typography.bodyMedium
             )
         }
 
@@ -168,7 +197,7 @@ fun CreateScreen(
         Section("Что вложить в комплект") {
             ToggleRow(
                 "Раздаточный материал",
-                "Опорный конспект для обучаемых",
+                "Заготовка с прочерками; чаще проще размножить лист из методички",
                 form.includeHandout
             ) { form.includeHandout = it }
             ThinRule(Modifier.padding(vertical = 4.dp))
@@ -209,22 +238,12 @@ fun CreateScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(10.dp))
-                    Row {
-                        OutlinedTextField(
-                            value = form.date,
-                            onValueChange = { form.date = it },
-                            label = { Text("Дата") },
-                            modifier = Modifier.weight(1.4f)
-                        )
-                        Spacer(Modifier.size(10.dp))
-                        OutlinedTextField(
-                            value = form.lessonNo,
-                            onValueChange = { form.lessonNo = it },
-                            label = { Text("Занятие №") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    OutlinedTextField(
+                        value = form.date,
+                        onValueChange = { form.date = it },
+                        label = { Text("Дата") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     Spacer(Modifier.height(10.dp))
                     OutlinedTextField(
                         value = form.leader,
@@ -294,8 +313,14 @@ fun CreateScreen(
             Text("Собрать конспект", style = MaterialTheme.typography.titleMedium)
         }
 
+        TextButton(
+            onClick = onSeries,
+            enabled = form.topic.isNotBlank(),
+            modifier = Modifier.padding(start = 20.dp)
+        ) { Text("Сразу заготовки на всю тему") }
+
         Text(
-            if (form.topic.isBlank()) "Введите тему — кнопка станет активной"
+            if (form.topic.isBlank()) "Введите тему — кнопки станут активными"
             else "Готовый комплект можно отправить, скопировать или сохранить в PDF",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -307,10 +332,9 @@ fun CreateScreen(
 
 /** Живой расчёт: показывает, как время разложится по частям занятия. */
 private fun timeBreakdown(minutes: Int, questions: Int): String {
-    val total = maxOf(15, minutes)
-    val intro = (((total * 10 / 100) + 2) / 5 * 5).coerceIn(5, 15)
-    val outro = (((total * 8 / 100) + 2) / 5 * 5).coerceIn(5, 10)
-    val main = maxOf(5, total - intro - outro)
+    val total = maxOf(20, minutes)
+    val edge = Generator.edgeMinutes(total)
+    val main = maxOf(5, total - edge * 2)
     val slices = Generator.split(main, questions)
-    return "Вводная $intro · основная $main (${slices.joinToString("+")}) · заключительная $outro"
+    return "Вводная $edge · основная $main (${slices.joinToString("+")}) · заключительная $edge"
 }

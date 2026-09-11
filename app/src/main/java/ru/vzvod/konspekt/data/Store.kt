@@ -30,6 +30,17 @@ class Store(context: Context) {
         persist()
     }
 
+    /** Копия занятия под новым номером — основа для следующего конспекта. */
+    fun duplicate(item: LessonInput): LessonInput {
+        val copy = item.copy(
+            id = java.util.UUID.randomUUID().toString(),
+            createdAt = System.currentTimeMillis()
+        )
+        archive.add(0, copy)
+        persist()
+        return copy
+    }
+
     fun save(item: LessonInput) {
         val idx = archive.indexOfFirst { it.id == item.id }
         if (idx >= 0) archive[idx] = item else archive.add(0, item)
@@ -46,6 +57,9 @@ class Store(context: Context) {
         persist()
     }
 
+    /** Перечитать всё с диска — после восстановления из резервной копии. */
+    fun reload() = load()
+
     private fun load() {
         runCatching {
             if (!file.exists()) return
@@ -57,7 +71,8 @@ class Store(context: Context) {
                     unitName = s.optString("unitName", ""),
                     approver = s.optString("approver", "Командир роты"),
                     defaultMinutes = s.optInt("defaultMinutes", 90),
-                    darkTheme = s.optBoolean("darkTheme", false)
+                    darkTheme = s.optBoolean("darkTheme", false),
+                    landscape = s.optBoolean("landscape", false)
                 )
             }
             val arr = root.optJSONArray("archive") ?: JSONArray()
@@ -78,6 +93,7 @@ class Store(context: Context) {
                     .put("approver", settings.approver)
                     .put("defaultMinutes", settings.defaultMinutes)
                     .put("darkTheme", settings.darkTheme)
+                    .put("landscape", settings.landscape)
             )
             val arr = JSONArray()
             archive.forEach { arr.put(toJson(it)) }
@@ -91,7 +107,10 @@ class Store(context: Context) {
         .put("createdAt", i.createdAt)
         .put("disciplineId", i.disciplineId)
         .put("topic", i.topic)
+        .put("themeNo", i.themeNo)
         .put("lessonNo", i.lessonNo)
+        .put("lessonTitle", i.lessonTitle)
+        .put("timeLabel", i.timeLabel)
         .put("minutes", i.minutes)
         .put("place", i.place)
         .put("method", i.method)
@@ -104,6 +123,19 @@ class Store(context: Context) {
         .put("includeControl", i.includeControl)
         .put("includeSafety", i.includeSafety)
         .put("note", i.note)
+        .put("edits", JSONObject(i.edits))
+
+    private fun readEdits(o: JSONObject?): Map<String, String> {
+        if (o == null) return emptyMap()
+        val out = HashMap<String, String>()
+        val it = o.keys()
+        while (it.hasNext()) {
+            val k = it.next()
+            val v = o.optString(k, "")
+            if (v.isNotBlank()) out[k] = v
+        }
+        return out
+    }
 
     private fun fromJson(o: JSONObject): LessonInput {
         val cq = o.optJSONArray("customQuestions") ?: JSONArray()
@@ -114,7 +146,10 @@ class Store(context: Context) {
             createdAt = o.optLong("createdAt", System.currentTimeMillis()),
             disciplineId = o.optString("disciplineId", "general"),
             topic = o.optString("topic", ""),
+            themeNo = o.optString("themeNo", "1"),
             lessonNo = o.optString("lessonNo", "1"),
+            lessonTitle = o.optString("lessonTitle", ""),
+            timeLabel = o.optString("timeLabel", ""),
             minutes = o.optInt("minutes", 90),
             place = o.optString("place", ""),
             method = o.optString("method", ""),
@@ -126,7 +161,8 @@ class Store(context: Context) {
             includeHandout = o.optBoolean("includeHandout", true),
             includeControl = o.optBoolean("includeControl", true),
             includeSafety = o.optBoolean("includeSafety", true),
-            note = o.optString("note", "")
+            note = o.optString("note", ""),
+            edits = readEdits(o.optJSONObject("edits"))
         )
     }
 }

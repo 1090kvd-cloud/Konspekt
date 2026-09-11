@@ -3,6 +3,7 @@ package ru.vzvod.konspekt.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,7 +46,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import ru.vzvod.konspekt.data.Materials
 import ru.vzvod.konspekt.logic.Renderer
 import ru.vzvod.konspekt.model.LessonPlan
 import ru.vzvod.konspekt.model.Settings
@@ -57,6 +61,7 @@ fun ResultScreen(
     settings: Settings,
     savedAlready: Boolean,
     onSave: () -> Unit,
+    onEdit: () -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -76,13 +81,14 @@ fun ResultScreen(
         }
     }
 
+    // Word открывает html с этим типом как обычный документ и позволяет его править.
     val saveLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/plain")
+        ActivityResultContracts.CreateDocument("application/msword")
     ) { uri ->
         if (uri != null) {
             runCatching {
                 context.contentResolver.openOutputStream(uri)?.use {
-                    it.write(Renderer.everything(plan, settings).toByteArray())
+                    it.write(Renderer.html(plan, settings).toByteArray(Charsets.UTF_8))
                 }
             }
         }
@@ -99,7 +105,7 @@ fun ResultScreen(
                             maxLines = 1
                         )
                         Text(
-                            "${plan.disciplineName} · ${plan.input.minutes} мин",
+                            "${plan.disciplineName} · ${Renderer.timeOf(plan)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -111,6 +117,9 @@ fun ResultScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Filled.EditNote, "Править текст")
+                    }
                     IconButton(onClick = onSave, enabled = !savedAlready) {
                         Icon(
                             Icons.Filled.BookmarkAdd,
@@ -139,14 +148,15 @@ fun ResultScreen(
                     ActionButton(Icons.Filled.Share, "Отправить") {
                         Export.share(context, Renderer.fileName(plan), currentText())
                     }
-                    ActionButton(Icons.Filled.Download, "Файл .txt") {
-                        saveLauncher.launch(Renderer.fileName(plan) + ".txt")
+                    ActionButton(Icons.Filled.Description, "Word") {
+                        saveLauncher.launch(Renderer.fileName(plan) + ".doc")
                     }
                     ActionButton(Icons.Filled.Print, "PDF") {
                         Export.printPdf(
                             context,
                             Renderer.fileName(plan),
-                            Renderer.html(plan, settings)
+                            Renderer.html(plan, settings),
+                            settings.landscape
                         )
                     }
                 }
@@ -210,102 +220,166 @@ private fun ActionButton(
 @Composable
 private fun PlanView(plan: LessonPlan, settings: Settings) {
     val i = plan.input
+    val unit = i.unitName.ifBlank { settings.unitName }
+
     Column {
         Spacer(Modifier.height(12.dp))
+
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
+            Text("УТВЕРЖДАЮ", style = MaterialTheme.typography.labelLarge)
+            Text(
+                settings.approver.ifBlank { "Командир роты" },
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                "«___» __________ 20___ г.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
         Text(
             "ПЛАН-КОНСПЕКТ",
-            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
+            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
         )
         Text(
-            "проведения занятия по предмету «${plan.disciplineName}»",
+            "проведения занятия по ${plan.dative}" +
+                if (unit.isNotBlank()) "\nс $unit" else "",
             style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(Modifier.height(14.dp))
 
-        val unit = i.unitName.ifBlank { settings.unitName }
-        if (unit.isNotBlank()) KeyValue("Подразделение", unit)
-        KeyValue("Тема", i.topic)
-        if (i.lessonNo.isNotBlank()) KeyValue("Занятие", i.lessonNo)
-        if (i.date.isNotBlank()) KeyValue("Дата", i.date)
-        KeyValue("Время", "${i.minutes} мин.")
-        KeyValue("Место", plan.place)
-        KeyValue("Метод", plan.method)
+        Spacer(Modifier.height(18.dp))
+        LabelledParagraph("ТЕМА ${i.themeNo}:", i.topic)
+        LabelledParagraph("ЗАНЯТИЕ ${i.lessonNo}:", lessonTitleOf(plan))
 
-        DocHeading("УЧЕБНЫЕ ВОПРОСЫ")
-        plan.questions.forEach { q ->
-            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        DocHeading("ЦЕЛИ")
+        plan.goals.forEachIndexed { k, g ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
                 Text(
-                    "${q.index}.",
+                    "${k + 1}.",
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.tertiary,
                     modifier = Modifier.width(24.dp)
                 )
-                Text(q.title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                Text(
-                    "${q.minutes}′",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(g, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             }
         }
 
-        DocHeading("ЦЕЛИ ЗАНЯТИЯ")
-        SubLabel("Учебные")
-        plan.eduGoals.forEach { Bullet(it) }
-        SubLabel("Воспитательные")
-        plan.upGoals.forEach { Bullet(it) }
-        if (plan.metGoals.isNotEmpty()) {
-            SubLabel("Методические")
-            plan.metGoals.forEach { Bullet(it) }
-        }
-
-        DocHeading("РУКОВОДСТВА И ПОСОБИЯ")
-        plan.references.forEach { Bullet(it) }
-
-        DocHeading("МАТЕРИАЛЬНОЕ ОБЕСПЕЧЕНИЕ")
-        plan.materials.forEach { Bullet(it) }
+        Spacer(Modifier.height(12.dp))
+        KeyValue("Время", Renderer.timeOf(plan) + if (i.date.isNotBlank()) ", ${i.date}" else "")
+        KeyValue("Место", plan.place)
+        KeyValue("Мат. обеспечение", plan.provision.joinToString(", "))
 
         if (plan.safety.isNotEmpty()) {
             DocHeading("ТРЕБОВАНИЯ БЕЗОПАСНОСТИ")
             plan.safety.forEach { Bullet(it) }
         }
 
-        DocHeading("ХОД ЗАНЯТИЯ", "${i.minutes} мин.")
-        StageView("I. ${plan.intro.title}", plan.intro.minutes, plan.intro.leader, plan.intro.trainee)
+        DocHeading("ХОД ЗАНЯТИЯ", Renderer.timeOf(plan))
+        StageView("1. ${plan.intro.title}", plan.intro.minutes, plan.intro.content, plan.intro.trainee)
+
         Spacer(Modifier.height(14.dp))
         Text(
-            "II. Основная часть — ${plan.mainMinutes} мин.",
+            "2. Основная часть — ${plan.mainMinutes} мин.",
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.primary
         )
         plan.questions.forEach { q ->
-            StageView(
-                "Учебный вопрос № ${q.index}. ${q.title}",
-                q.minutes, q.leader, q.trainee
-            )
+            StageView("${q.index}. ${q.title}", q.minutes, q.content, q.trainee)
         }
+
         Spacer(Modifier.height(14.dp))
-        StageView("III. ${plan.outro.title}", plan.outro.minutes, plan.outro.leader, plan.outro.trainee)
+        StageView("3. ${plan.outro.title}", plan.outro.minutes, plan.outro.content, plan.outro.trainee)
 
         if (i.note.isNotBlank()) {
             DocHeading("ПРИМЕЧАНИЯ РУКОВОДИТЕЛЯ")
             Text(i.note, style = MaterialTheme.typography.bodyMedium)
         }
 
-        Spacer(Modifier.height(22.dp))
-        ThinRule()
-        Spacer(Modifier.height(8.dp))
+        val materials = Materials.forDiscipline(i.disciplineId)
+        if (materials.isNotEmpty()) {
+            val context = LocalContext.current
+            DocHeading("МАТЕРИАЛЫ К ЗАНЯТИЮ")
+            materials.forEach { m ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { Materials.open(context, m) }
+                        .padding(vertical = 8.dp)
+                ) {
+                    Text(
+                        "→",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.width(22.dp)
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(m.title, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "${Materials.kindText(m.mime, m.title)} · ${Materials.sizeText(m.size)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            Text(
+                "Раздел для подготовки: в печатный документ и в отправку он не попадает.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+
+        Spacer(Modifier.height(26.dp))
         Text(
-            "Руководитель занятия: ${i.leader.ifBlank { settings.leader }.ifBlank { "________________" }}",
-            style = MaterialTheme.typography.bodyMedium
+            "Руководитель занятия",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
+        )
+        Text(
+            i.leader.ifBlank { settings.leader }.ifBlank { "________________________" },
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(Modifier.height(30.dp))
     }
 }
 
+private fun lessonTitleOf(plan: LessonPlan): String {
+    val own = plan.input.lessonTitle.trim()
+    if (own.isNotEmpty()) return own
+    return plan.questions.joinToString(" ") { it.title.trimEnd('.') + "." }
+}
+
 @Composable
-private fun StageView(title: String, minutes: Int, leader: List<String>, trainee: List<String>) {
+private fun LabelledParagraph(label: String, text: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text.uppercase(),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun StageView(title: String, minutes: Int, content: List<String>, trainee: List<String>) {
     Column(Modifier.padding(top = 12.dp)) {
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
@@ -320,9 +394,9 @@ private fun StageView(title: String, minutes: Int, leader: List<String>, trainee
             )
         }
         Spacer(Modifier.height(6.dp))
-        SubLabel("Руководитель")
-        leader.forEach { Bullet(it, "•") }
-        SubLabel("Обучаемые")
+        SubLabel("Содержание учебных вопросов")
+        content.forEach { Bullet(it, "•") }
+        SubLabel("Действия обучаемых")
         trainee.forEach { Bullet(it, "•") }
     }
 }

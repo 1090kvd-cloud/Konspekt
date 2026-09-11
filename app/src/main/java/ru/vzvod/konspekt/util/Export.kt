@@ -34,8 +34,9 @@ object Export {
         context.startActivity(Intent.createChooser(intent, "Отправить конспект"))
     }
 
-    /** Открывает системный диалог печати. Оттуда доступно «Сохранить в PDF». */
-    fun printPdf(context: Context, jobName: String, html: String) {
+    /** Открывает системный диалог печати. Оттуда доступно «Сохранить в PDF».
+     *  Ориентацию можно поменять и в самом диалоге. */
+    fun printPdf(context: Context, jobName: String, html: String, landscape: Boolean = true) {
         val web = WebView(context)
         web.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String) {
@@ -46,7 +47,10 @@ object Export {
                     adapter,
                     // Поля не задаём: система подставит поля принтера.
                     PrintAttributes.Builder()
-                        .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                        .setMediaSize(
+                            if (landscape) PrintAttributes.MediaSize.ISO_A4.asLandscape()
+                            else PrintAttributes.MediaSize.ISO_A4
+                        )
                         .build()
                 )
                 printView = null

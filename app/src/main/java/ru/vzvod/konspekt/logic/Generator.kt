@@ -1,6 +1,6 @@
 package ru.vzvod.konspekt.logic
 
-import ru.vzvod.konspekt.data.Disciplines
+import ru.vzvod.konspekt.data.Library
 import ru.vzvod.konspekt.model.HandoutBlock
 import ru.vzvod.konspekt.model.LessonInput
 import ru.vzvod.konspekt.model.LessonPlan
@@ -10,20 +10,46 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Собирает документ из введённых данных.
+ * Собирает документ по форме план-конспекта: вводная — основная — заключительная,
+ * содержание от первого лица, действия обучаемых отдельной графой.
  * Генерация детерминированная: одинаковый ввод — одинаковый конспект.
  */
 object Generator {
 
-    fun build(input: LessonInput): LessonPlan {
-        val d = Disciplines.byId(input.disciplineId)
+    /** В образцах вводная и заключительная части — по 5 минут независимо от общей продолжительности. */
+    private const val EDGE = 5
+
+    /** Ключи разделов, которые можно править руками. */
+    object Keys {
+        const val GOALS = "goals"
+        const val PROVISION = "provision"
+        const val SAFETY = "safety"
+        const val CONTROL = "control"
+        const val INTRO_CONTENT = "intro.content"
+        const val INTRO_TRAINEE = "intro.trainee"
+        const val OUTRO_CONTENT = "outro.content"
+        const val OUTRO_TRAINEE = "outro.trainee"
+        fun qTitle(n: Int) = "q$n.title"
+        fun qContent(n: Int) = "q$n.content"
+        fun qTrainee(n: Int) = "q$n.trainee"
+    }
+
+    /** Текст правки -> список пунктов. Пустые строки отбрасываются. */
+    fun lines(text: String): List<String> =
+        text.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+
+    /**
+     * @param applyEdits false — собрать документ начисто, как его предлагает шаблон.
+     *        Нужно экрану правки, чтобы показать исходный вариант.
+     */
+    fun build(input: LessonInput, applyEdits: Boolean = true): LessonPlan {
+        val d = Library.byId(input.disciplineId)
         val topic = input.topic.trim().ifBlank { "тема занятия" }
         fun t(s: String) = s.replace("{t}", topic)
 
-        val total = max(15, input.minutes)
-        val intro = clampRound(total * 10 / 100, 5, 15)
-        val outro = clampRound(total * 8 / 100, 5, 10)
-        val main = max(5, total - intro - outro)
+        val total = max(20, input.minutes)
+        val edge = if (total >= 30) EDGE else 5
+        val main = max(5, total - edge * 2)
 
         val titles = questionTitles(input, d, ::t)
         val slices = split(main, titles.size)
@@ -31,33 +57,64 @@ object Generator {
         val place = input.place.ifBlank { d.places.first() }
         val method = input.method.ifBlank { d.methods.first() }
 
+        val edits = if (applyEdits) input.edits else emptyMap()
+        fun list(key: String, fallback: List<String>): List<String> {
+            val text = edits[key] ?: return fallback
+            return lines(text)
+        }
+        fun one(key: String, fallback: String): String =
+            edits[key]?.trim()?.ifBlank { null } ?: fallback
+
         val questions = titles.mapIndexed { i, title ->
+            val n = i + 1
             QuestionBlock(
-                index = i + 1,
-                title = title,
+                index = n,
+                title = one(Keys.qTitle(n), title),
                 minutes = slices[i],
-                leader = leaderActions(i, titles.size, d, method),
-                trainee = traineeActions(i, titles.size)
+                content = list(Keys.qContent(n), questionContent(i, titles.size, d, method)),
+                trainee = list(Keys.qTrainee(n), traineeActions(i, titles.size))
+            )
+        }
+
+        val intro = introStage(edge, input, topic).let {
+            it.copy(
+                content = list(Keys.INTRO_CONTENT, it.content),
+                trainee = list(Keys.INTRO_TRAINEE, it.trainee)
+            )
+        }
+        val outro = outroStage(edge).let {
+            it.copy(
+                content = list(Keys.OUTRO_CONTENT, it.content),
+                trainee = list(Keys.OUTRO_TRAINEE, it.trainee)
             )
         }
 
         return LessonPlan(
             input = input,
             disciplineName = d.name,
+            dative = d.dative.ifBlank { Renderer.disciplineCase(d.name) },
             place = place,
             method = method,
-            eduGoals = pick(d.eduGoals, min(3, d.eduGoals.size), topic).map(::t),
-            upGoals = pick(d.upGoals, 2, topic).map(::t),
-            metGoals = pick(d.metGoals, 1, topic).map(::t),
-            materials = d.materials,
-            references = d.references,
-            safety = if (input.includeSafety) d.safety else emptyList(),
-            intro = introStage(intro, input, topic),
+            goals = list(Keys.GOALS, buildGoals(d, ::t, topic)),
+            provision = list(Keys.PROVISION, (d.materials + d.references).distinct()),
+            safety = list(Keys.SAFETY, if (input.includeSafety) d.safety else emptyList()),
+            intro = intro,
             questions = questions,
-            outro = outroStage(outro),
+            outro = outro,
             handout = if (input.includeHandout) handout(d.handout, topic, titles) else emptyList(),
-            control = if (input.includeControl) d.control.map(::t) else emptyList()
+            control = list(Keys.CONTROL, if (input.includeControl) d.control.map(::t).take(4) else emptyList())
         )
+    }
+
+    /** Цели идут сплошным нумерованным списком: сначала учебные, последней — воспитательная. */
+    private fun buildGoals(
+        d: ru.vzvod.konspekt.model.Discipline,
+        t: (String) -> String,
+        seed: String
+    ): List<String> {
+        val learn = pick(d.eduGoals, min(2, d.eduGoals.size), seed).map(t)
+        val raise = pick(d.upGoals, 1, seed).map(t)
+        return learn + raise
     }
 
     // --- учебные вопросы ---
@@ -77,69 +134,64 @@ object Generator {
     // --- ход занятия ---
 
     private fun introStage(minutes: Int, input: LessonInput, topic: String): Stage {
-        val leader = mutableListOf(
-            "Принимаю доклад заместителя командира взвода о готовности подразделения к занятию.",
-            "Проверяю наличие личного состава по списку, внешний вид, экипировку и наличие рабочих тетрадей.",
-            "Проверяю усвоение материала предыдущего занятия — опрашиваю 2–3 обучаемых, выставляю оценки.",
-            "Объявляю тему занятия «$topic», учебные вопросы, цели и порядок проведения занятия."
+        val content = mutableListOf(
+            "Принимаю доклад заместителя командира взвода о готовности к занятию.",
+            "Проверяю наличие личного состава, готовность к занятию, внешний вид и экипировку.",
+            "Проверяю усвоение материала предыдущего занятия, опрашиваю 2–3 обучаемых.",
+            "Довожу тему занятия «$topic», учебные вопросы и цели."
         )
         if (input.includeSafety) {
-            leader += "Провожу инструктаж по требованиям безопасности, довожу сигналы прекращения занятия, отмечаю в журнале под роспись."
+            content += "Довожу требования безопасности и порядок их выполнения, отмечаю в журнале под роспись."
         }
-        leader += "Проверяю наличие и исправность материального обеспечения занятия."
-
         val trainee = listOf(
-            "Строятся в установленном месте, докладывают о готовности к занятию.",
-            "Записывают в рабочие тетради дату, тему и учебные вопросы занятия.",
-            "Отвечают на контрольные вопросы по предыдущему занятию.",
-            "Расписываются в журнале инструктажа по требованиям безопасности."
+            "Строятся в установленном месте, докладывают о наличии личного состава.",
+            "Слушают, записывают тему занятия и учебные вопросы.",
+            "Отвечают на контрольные вопросы по предыдущему занятию."
         )
-        return Stage("Вводная часть", minutes, leader, trainee)
+        return Stage("Вводная часть", minutes, content, trainee)
     }
 
-    private fun leaderActions(
+    private fun questionContent(
         i: Int,
         n: Int,
         d: ru.vzvod.konspekt.model.Discipline,
         method: String
     ): List<String> {
         val hints = d.practiceHints
-        val base = mutableListOf("Объявляю учебный вопрос № ${i + 1} и его целевую установку.")
+        val out = mutableListOf<String>()
         when {
             i == 0 -> {
-                base += "Метод отработки: $method. Излагаю материал вопроса, использую наглядные пособия."
-                base += "Добиваюсь ведения обучаемыми записей в рабочих тетрадях, контролирую по рядам."
-                base += hints.getOrElse(0) { "Показываю выполнение приёма, поясняя последовательность действий." }
+                out += "Метод отработки: $method. Излагаю материал вопроса, использую наглядные пособия."
+                out += "Добиваюсь ведения обучаемыми записей в рабочих тетрадях, контролирую по рядам."
+                out += hints.getOrElse(0) { "Показываю выполнение приёма, поясняя последовательность действий." }
             }
             i == n - 1 && n > 1 -> {
-                base += hints.getOrElse(2) { "Организую самостоятельную отработку под контролем командиров отделений." }
-                base += "Провожу контрольный опрос 3–4 обучаемых, оцениваю качество усвоения."
-                base += "Разбираю характерные ошибки, добиваюсь их устранения."
+                out += hints.getOrElse(2) { "Организую самостоятельную отработку под контролем командиров отделений." }
+                out += "Провожу контрольный опрос 3–4 обучаемых, оцениваю качество усвоения."
+                out += "Разбираю характерные ошибки, добиваюсь их устранения."
             }
             else -> {
-                base += hints.getOrElse(1) { "Организую тренировку по отделениям под руководством командиров отделений." }
-                base += "Обхожу рабочие места, контролирую правильность действий, оказываю помощь отстающим."
-                base += "При грубых ошибках останавливаю тренировку, показываю повторно."
+                out += hints.getOrElse(1) { "Организую тренировку по отделениям под руководством командиров отделений." }
+                out += "Обхожу рабочие места, контролирую правильность действий, помогаю отстающим."
+                out += "При грубых ошибках останавливаю тренировку и показываю повторно."
             }
         }
-        base += "Подвожу краткий итог по вопросу, отвечаю на вопросы обучаемых."
-        return base
+        out += "Подвожу краткий итог по вопросу, отвечаю на вопросы обучаемых."
+        return out
     }
 
     private fun traineeActions(i: Int, n: Int): List<String> = when {
         i == 0 -> listOf(
-            "Записывают наименование учебного вопроса и основные положения.",
-            "Внимательно слушают, наблюдают за показом, уясняют последовательность действий.",
-            "Задают уточняющие вопросы руководителю занятия."
+            "Слушают, конспектируют материал учебного вопроса.",
+            "Наблюдают за показом, уясняют последовательность действий.",
+            "Задают уточняющие вопросы."
         )
         i == n - 1 && n > 1 -> listOf(
             "Самостоятельно выполняют изученные приёмы под контролем командиров отделений.",
-            "Отвечают на контрольные вопросы руководителя занятия.",
-            "Устраняют указанные недостатки, повторяют действия."
+            "Отвечают на контрольные вопросы, устраняют указанные недостатки."
         )
         else -> listOf(
-            "Выполняют приёмы (действия) в составе отделений.",
-            "Повторяют действия до правильного и уверенного выполнения.",
+            "Выполняют приёмы в составе отделений, повторяют до уверенного выполнения.",
             "Докладывают командирам отделений о выполнении."
         )
     }
@@ -148,17 +200,14 @@ object Generator {
         "Заключительная часть", minutes,
         listOf(
             "Напоминаю тему, учебные вопросы и цели занятия, указываю степень их достижения.",
-            "Провожу разбор занятия: отмечаю лучших, указываю на характерные недостатки и их причины.",
-            "Объявляю оценки личному составу, выставляю их в журнал боевой подготовки.",
+            "Объявляю индивидуальные оценки каждому обучаемому и указываю на основные ошибки.",
             "Отвечаю на вопросы обучаемых.",
-            "Ставлю задачу на самостоятельную подготовку и указываю литературу для изучения.",
-            "Проверяю наличие личного состава и материального обеспечения, организую сдачу имущества.",
-            "Объявляю об окончании занятия, подаю команду на следование к месту дальнейших занятий."
+            "Даю указания на подготовку к следующему занятию, указываю литературу.",
+            "Проверяю наличие личного состава и материального обеспечения, организую сдачу имущества."
         ),
         listOf(
-            "Слушают разбор занятия, записывают задание на самостоятельную подготовку.",
-            "Сдают полученное имущество, приводят в порядок место занятия.",
-            "Строятся в установленном месте по команде командиров отделений."
+            "Слушают, задают вопросы, записывают литературу.",
+            "Сдают полученное имущество, приводят в порядок место занятия."
         )
     )
 
@@ -194,10 +243,25 @@ object Generator {
         return result
     }
 
-    private fun clampRound(v: Int, lo: Int, hi: Int): Int {
-        val r = ((v + 2) / 5) * 5
-        return r.coerceIn(lo, hi)
+    /** Время в шапке: «2 часа», «1 час 30 мин», «45 мин». */
+    fun timeText(minutes: Int): String {
+        val h = minutes / 60
+        val m = minutes % 60
+        val hours = when {
+            h == 0 -> ""
+            h % 10 == 1 && h % 100 != 11 -> "$h час"
+            h % 10 in 2..4 && h % 100 !in 12..14 -> "$h часа"
+            else -> "$h часов"
+        }
+        return when {
+            h == 0 -> "$m мин"
+            m == 0 -> hours
+            else -> "$hours $m мин"
+        }
     }
+
+    /** Постоянная часть занятия: вводная и заключительная. */
+    fun edgeMinutes(total: Int): Int = if (max(20, total) >= 30) EDGE else 5
 
     /** Детерминированный выбор n элементов: зависит от темы, но не меняется между запусками. */
     private fun pick(src: List<String>, n: Int, seed: String): List<String> {

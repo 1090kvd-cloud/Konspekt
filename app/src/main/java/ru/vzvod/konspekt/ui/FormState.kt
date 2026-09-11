@@ -13,17 +13,24 @@ class FormState(settings: Settings) {
 
     var editingId: String? = null
     var disciplineId by mutableStateOf("general")
+
+    /** Строка «ТЕМА N:» — раздел программы. */
+    var themeNo by mutableStateOf("1")
     var topic by mutableStateOf("")
+
+    /** Строка «ЗАНЯТИЕ N:» — наименование самого занятия. */
+    var lessonNo by mutableStateOf("1")
+    var lessonTitle by mutableStateOf("")
+
     var minutes by mutableStateOf(settings.defaultMinutes)
     var questionCount by mutableStateOf(3)
-    var lessonNo by mutableStateOf("1")
     var place by mutableStateOf("")
     var method by mutableStateOf("")
     var unitName by mutableStateOf("")
     var date by mutableStateOf("")
     var leader by mutableStateOf("")
     var note by mutableStateOf("")
-    var includeHandout by mutableStateOf(true)
+    var includeHandout by mutableStateOf(false)
     var includeControl by mutableStateOf(true)
     var includeSafety by mutableStateOf(true)
 
@@ -39,7 +46,9 @@ class FormState(settings: Settings) {
         createdAt = System.currentTimeMillis(),
         disciplineId = disciplineId,
         topic = topic.trim(),
-        lessonNo = lessonNo.trim(),
+        themeNo = themeNo.trim().ifBlank { "1" },
+        lessonNo = lessonNo.trim().ifBlank { "1" },
+        lessonTitle = lessonTitle.trim(),
         minutes = minutes,
         place = place.trim(),
         method = method.trim(),
@@ -58,9 +67,11 @@ class FormState(settings: Settings) {
         editingId = i.id
         disciplineId = i.disciplineId
         topic = i.topic
+        themeNo = i.themeNo
+        lessonNo = i.lessonNo
+        lessonTitle = i.lessonTitle
         minutes = i.minutes
         questionCount = i.questionCount
-        lessonNo = i.lessonNo
         place = i.place
         method = i.method
         unitName = i.unitName
@@ -77,16 +88,18 @@ class FormState(settings: Settings) {
     fun reset(settings: Settings) {
         editingId = null
         topic = ""
+        themeNo = "1"
+        lessonNo = "1"
+        lessonTitle = ""
         minutes = settings.defaultMinutes
         questionCount = 3
-        lessonNo = "1"
         place = ""
         method = ""
         unitName = ""
         date = ""
         leader = ""
         note = ""
-        includeHandout = true
+        includeHandout = false
         includeControl = true
         includeSafety = true
         customQuestions.clear()

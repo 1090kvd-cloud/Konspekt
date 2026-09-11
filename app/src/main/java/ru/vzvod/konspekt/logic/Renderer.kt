@@ -3,7 +3,11 @@ package ru.vzvod.konspekt.logic
 import ru.vzvod.konspekt.model.LessonPlan
 import ru.vzvod.konspekt.model.Settings
 
-/** Превращает LessonPlan в текст для копирования и в HTML для печати/PDF. */
+/**
+ * Вывод документа по форме образца:
+ * шапка с грифом утверждения, ТЕМА и ЗАНЯТИЕ прописными, цели нумерованным списком,
+ * ход занятия таблицей из четырёх граф.
+ */
 object Renderer {
 
     fun fileName(plan: LessonPlan): String {
@@ -13,6 +17,16 @@ object Renderer {
             .take(40)
             .ifBlank { "konspekt" }
         return "План-конспект_$safe"
+    }
+
+    /** Время в шапке: своя запись руководителя, иначе — расчётная. */
+    fun timeOf(plan: LessonPlan): String =
+        plan.input.timeLabel.ifBlank { Generator.timeText(plan.input.minutes) }
+
+    private fun lessonTitle(plan: LessonPlan): String {
+        val own = plan.input.lessonTitle.trim()
+        if (own.isNotEmpty()) return own
+        return plan.questions.joinToString(" ") { it.title.trimEnd('.') + "." }
     }
 
     // ---------- ТЕКСТ ----------
@@ -25,76 +39,60 @@ object Renderer {
         appendLine("«____» ______________ 20____ г.")
         appendLine()
         appendLine("ПЛАН-КОНСПЕКТ")
-        appendLine("проведения занятия по предмету «${plan.disciplineName}»")
+        appendLine("проведения занятия по ${plan.dative}")
         val unit = i.unitName.ifBlank { s.unitName }
-        if (unit.isNotBlank()) appendLine("с личным составом: $unit")
-        if (i.date.isNotBlank()) appendLine("Дата проведения: ${i.date}")
+        if (unit.isNotBlank()) appendLine("с $unit")
         appendLine()
-        appendLine("Тема: ${i.topic}")
-        if (i.lessonNo.isNotBlank()) appendLine("Занятие: ${i.lessonNo}")
-        appendLine("Время: ${i.minutes} мин.")
-        appendLine("Место проведения: ${plan.place}")
-        appendLine("Метод проведения: ${plan.method}")
+        appendLine("ТЕМА ${i.themeNo}: ${i.topic.uppercase()}")
+        appendLine("ЗАНЯТИЕ ${i.lessonNo}: ${lessonTitle(plan).uppercase()}")
         appendLine()
-        appendLine("УЧЕБНЫЕ ВОПРОСЫ:")
-        plan.questions.forEach { appendLine("${it.index}. ${it.title} — ${it.minutes} мин.") }
+        appendLine("ЦЕЛИ:")
+        plan.goals.forEachIndexed { k, g -> appendLine("${k + 1}. $g") }
         appendLine()
-        appendLine("ЦЕЛИ ЗАНЯТИЯ:")
-        appendLine("Учебные:")
-        plan.eduGoals.forEach { appendLine("  — $it") }
-        appendLine("Воспитательные:")
-        plan.upGoals.forEach { appendLine("  — $it") }
-        if (plan.metGoals.isNotEmpty()) {
-            appendLine("Методические:")
-            plan.metGoals.forEach { appendLine("  — $it") }
-        }
-        appendLine()
-        appendLine("РУКОВОДСТВА И ПОСОБИЯ:")
-        plan.references.forEach { appendLine("  — $it") }
-        appendLine()
-        appendLine("МАТЕРИАЛЬНОЕ ОБЕСПЕЧЕНИЕ:")
-        plan.materials.forEach { appendLine("  — $it") }
+        appendLine("Время: ${timeOf(plan)};    «____» ____________ 20____ г.")
+        appendLine("Место: ${plan.place}.")
+        appendLine("Материальное обеспечение: ${plan.provision.joinToString(", ")}.")
         if (plan.safety.isNotEmpty()) {
             appendLine()
-            appendLine("ТРЕБОВАНИЯ БЕЗОПАСНОСТИ:")
+            appendLine("Требования безопасности:")
             plan.safety.forEach { appendLine("  — $it") }
         }
         appendLine()
-        appendLine("=".repeat(52))
         appendLine("ХОД ЗАНЯТИЯ")
         appendLine("=".repeat(52))
+
+        fun block(no: String, title: String, minutes: Int, content: List<String>, trainee: List<String>) {
+            appendLine()
+            appendLine("$no. $title — $minutes мин.")
+            appendLine("Содержание учебных вопросов:")
+            content.forEach { appendLine("  • $it") }
+            appendLine("Действия обучаемых:")
+            trainee.forEach { appendLine("  • $it") }
+        }
+
+        block("1", plan.intro.title, plan.intro.minutes, plan.intro.content, plan.intro.trainee)
         appendLine()
-        appendLine("I. ${plan.intro.title.uppercase()} — ${plan.intro.minutes} мин.")
-        appendLine()
-        appendLine("Действия руководителя:")
-        plan.intro.leader.forEach { appendLine("  • $it") }
-        appendLine("Действия обучаемых:")
-        plan.intro.trainee.forEach { appendLine("  • $it") }
-        appendLine()
-        appendLine("II. ОСНОВНАЯ ЧАСТЬ — ${plan.mainMinutes} мин.")
+        appendLine("2. Основная часть — ${plan.mainMinutes} мин.")
         plan.questions.forEach { q ->
             appendLine()
-            appendLine("Учебный вопрос № ${q.index}. ${q.title} — ${q.minutes} мин.")
-            appendLine("Действия руководителя:")
-            q.leader.forEach { appendLine("  • $it") }
-            appendLine("Действия обучаемых:")
-            q.trainee.forEach { appendLine("  • $it") }
+            appendLine("  ${q.index}. ${q.title} — ${q.minutes} мин.")
+            appendLine("  Содержание учебных вопросов:")
+            q.content.forEach { appendLine("    • $it") }
+            appendLine("  Действия обучаемых:")
+            q.trainee.forEach { appendLine("    • $it") }
         }
-        appendLine()
-        appendLine("III. ${plan.outro.title.uppercase()} — ${plan.outro.minutes} мин.")
-        appendLine()
-        appendLine("Действия руководителя:")
-        plan.outro.leader.forEach { appendLine("  • $it") }
-        appendLine("Действия обучаемых:")
-        plan.outro.trainee.forEach { appendLine("  • $it") }
+        block("3", plan.outro.title, plan.outro.minutes, plan.outro.content, plan.outro.trainee)
+
         if (i.note.isNotBlank()) {
             appendLine()
             appendLine("ПРИМЕЧАНИЯ РУКОВОДИТЕЛЯ:")
             appendLine(i.note)
         }
         appendLine()
-        appendLine("Руководитель занятия: ${i.leader.ifBlank { s.leader }.ifBlank { "____________________________" }}")
-        appendLine("«____» ______________ 20____ г.        _______________")
+        appendLine()
+        appendLine("Руководитель занятия")
+        appendLine(i.leader.ifBlank { s.leader })
+        appendLine("____________________________")
     }
 
     fun handoutText(plan: LessonPlan, s: Settings): String = buildString {
@@ -133,6 +131,19 @@ object Renderer {
         }
     }
 
+    /** «по огневой подготовке», «по тактической подготовке» — родительный падеж названия предмета. */
+    fun disciplineCase(name: String): String {
+        val lower = name.lowercase()
+        return when {
+            lower.endsWith("ая подготовка") -> lower.dropLast("ая подготовка".length) + "ой подготовке"
+            lower.endsWith("подготовка") -> lower.dropLast("подготовка".length) + "подготовке"
+            lower.endsWith("уставы") -> "общевоинским уставам"
+            lower.endsWith("защита") -> lower.dropLast("защита".length) + "защите"
+            lower.endsWith("топография") -> lower.dropLast("топография".length) + "топографии"
+            else -> lower
+        }
+    }
+
     // ---------- HTML для печати / PDF ----------
 
     private fun esc(s: String) = s
@@ -143,85 +154,101 @@ object Renderer {
 
     fun html(plan: LessonPlan, s: Settings): String {
         val i = plan.input
+        val land = s.landscape
         val unit = i.unitName.ifBlank { s.unitName }
         val sb = StringBuilder()
-        sb.append(
-            """
-            <html><head><meta charset="utf-8"><style>
-            body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.35;color:#000;margin:18px}
-            h1{font-size:14pt;text-align:center;margin:6px 0}
-            h2{font-size:12.5pt;border-bottom:1.5pt solid #000;padding-bottom:2px;margin:16px 0 6px}
-            h3{font-size:12pt;margin:12px 0 4px}
-            .app{text-align:right;white-space:pre-line;margin-bottom:14px}
-            .meta p{margin:2px 0}
-            ul{margin:2px 0 6px 0;padding-left:20px}
-            li{margin:1px 0}
-            .sign{margin-top:26px}
-            .lbl{font-style:italic;margin:6px 0 0}
-            .page{page-break-before:always}
-            table{width:100%;border-collapse:collapse;margin-top:4px}
-            td{border:0.8pt solid #000;vertical-align:top;padding:4px 6px;width:50%}
-            th{border:0.8pt solid #000;padding:4px 6px;font-size:11pt}
-            .fill{border-bottom:0.8pt solid #666;display:inline-block;min-width:60%}
-            </style></head><body>
-            """.trimIndent()
-        )
-        sb.append("<div class=\"app\">УТВЕРЖДАЮ\n${esc(s.approver.ifBlank { "Командир роты" })}\n____________________\n«___» __________ 20__ г.</div>")
-        sb.append("<h1>ПЛАН-КОНСПЕКТ<br>проведения занятия по предмету «${esc(plan.disciplineName)}»</h1>")
-        sb.append("<div class=\"meta\">")
-        if (unit.isNotBlank()) sb.append("<p><b>Подразделение:</b> ${esc(unit)}</p>")
-        sb.append("<p><b>Тема:</b> ${esc(i.topic)}</p>")
-        if (i.lessonNo.isNotBlank()) sb.append("<p><b>Занятие:</b> ${esc(i.lessonNo)}</p>")
-        if (i.date.isNotBlank()) sb.append("<p><b>Дата:</b> ${esc(i.date)}</p>")
-        sb.append("<p><b>Время:</b> ${i.minutes} мин.</p>")
-        sb.append("<p><b>Место проведения:</b> ${esc(plan.place)}</p>")
-        sb.append("<p><b>Метод проведения:</b> ${esc(plan.method)}</p>")
+
+        sb.append("<html><head><meta charset=\"utf-8\"><style>")
+        sb.append("@page{size:A4 " + (if (land) "landscape" else "portrait") + ";margin:" + (if (land) "12mm" else "20mm 15mm 15mm 25mm") + "}")
+        sb.append("body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.3;color:#000;margin:0;text-align:justify}")
+        sb.append(".approve{margin-left:55%;white-space:pre-line;margin-bottom:18px}")
+        sb.append(".line{border-bottom:0.8pt solid #000;height:14px;margin:6px 0}")
+        sb.append("h1{font-size:12pt;text-align:center;font-weight:bold;margin:10px 0 2px}")
+        sb.append(".sub{text-align:center;margin:0 0 14px}")
+        sb.append(".key{font-weight:bold}")
+        sb.append("p{margin:3px 0}")
+        sb.append(".theme{text-transform:uppercase;text-indent:1.25cm}")
+        sb.append(".run{text-align:center;font-weight:bold;margin:16px 0 6px}")
+        sb.append("table{width:100%;border-collapse:collapse}")
+        sb.append("th,td{border:0.8pt solid #000;padding:4px 6px;vertical-align:top;text-align:left}")
+        sb.append("th{text-align:center;font-weight:normal}")
+        sb.append("thead{display:table-header-group}tr{page-break-inside:avoid}")
+        sb.append("ul{margin:2px 0;padding-left:16px}li{margin:1px 0}")
+        sb.append(".q{font-weight:bold;margin-top:8px}")
+        sb.append(".sign{margin-top:34px;text-align:center}")
+        sb.append(".page{page-break-before:always}")
+        sb.append("</style></head><body>")
+
+        sb.append("<div class=\"approve\">УТВЕРЖДАЮ\n${esc(s.approver.ifBlank { "Командир роты" })}")
+        sb.append("<div class=\"line\"></div><div class=\"line\"></div>")
+        sb.append("«___» ____________ 20___ г.</div>")
+
+        sb.append("<h1>ПЛАН-КОНСПЕКТ</h1>")
+        sb.append("<div class=\"sub\">проведения занятия по ${esc(plan.dative)}")
+        if (unit.isNotBlank()) sb.append("<br>с ${esc(unit)}")
         sb.append("</div>")
 
-        sb.append("<h2>Учебные вопросы</h2><ol>")
-        plan.questions.forEach { sb.append("<li>${esc(it.title)} — ${it.minutes} мин.</li>") }
-        sb.append("</ol>")
+        sb.append("<p class=\"theme\"><span class=\"key\">ТЕМА ${esc(i.themeNo)}:</span> ${esc(i.topic)}</p>")
+        sb.append("<p class=\"theme\"><span class=\"key\">ЗАНЯТИЕ ${esc(i.lessonNo)}:</span> ${esc(lessonTitle(plan))}</p>")
 
-        sb.append("<h2>Цели занятия</h2>")
-        sb.append("<p class=\"lbl\">Учебные:</p>").append(ul(plan.eduGoals))
-        sb.append("<p class=\"lbl\">Воспитательные:</p>").append(ul(plan.upGoals))
-        if (plan.metGoals.isNotEmpty()) sb.append("<p class=\"lbl\">Методические:</p>").append(ul(plan.metGoals))
-
-        sb.append("<h2>Руководства и пособия</h2>").append(ul(plan.references))
-        sb.append("<h2>Материальное обеспечение</h2>").append(ul(plan.materials))
-        if (plan.safety.isNotEmpty()) sb.append("<h2>Требования безопасности</h2>").append(ul(plan.safety))
-
-        sb.append("<h2>Ход занятия</h2>")
-        fun stage(title: String, minutes: Int, leader: List<String>, trainee: List<String>) {
-            sb.append("<h3>$title — $minutes мин.</h3>")
-            sb.append("<table><tr><th>Действия руководителя занятия</th><th>Действия обучаемых</th></tr>")
-            sb.append("<tr><td>${ul(leader)}</td><td>${ul(trainee)}</td></tr></table>")
+        sb.append("<p class=\"key\" style=\"text-indent:1.25cm\">ЦЕЛИ:</p>")
+        plan.goals.forEachIndexed { k, g ->
+            sb.append("<p style=\"text-indent:1.25cm\">${k + 1}. ${esc(g)}</p>")
         }
-        stage("I. ${plan.intro.title}", plan.intro.minutes, plan.intro.leader, plan.intro.trainee)
-        sb.append("<h3>II. Основная часть — ${plan.mainMinutes} мин.</h3>")
+
+        sb.append("<p style=\"text-indent:1.25cm\"><span class=\"key\">Время:</span> ${timeOf(plan)};&nbsp;&nbsp;&nbsp;&nbsp;«___» __________ 20___ г.</p>")
+        sb.append("<p style=\"text-indent:1.25cm\"><span class=\"key\">Место:</span> ${esc(plan.place)}.</p>")
+        sb.append("<p style=\"text-indent:1.25cm\"><span class=\"key\">Материальное обеспечение:</span> ${esc(plan.provision.joinToString(", "))}.</p>")
+        if (plan.safety.isNotEmpty()) {
+            sb.append("<p style=\"text-indent:1.25cm\"><span class=\"key\">Требования безопасности:</span></p>")
+            sb.append(ul(plan.safety))
+        }
+
+        sb.append("<div class=\"run\">ХОД ЗАНЯТИЯ</div>")
+        sb.append("<table><thead><tr>")
+        sb.append("<th style=\"width:5%\">№<br>п/п</th>")
+        sb.append("<th style=\"width:14%\">Учебные вопросы</th>")
+        sb.append("<th style=\"width:66%\">Содержание учебных вопросов</th>")
+        sb.append("<th style=\"width:15%\">Действия обучаемых</th>")
+        sb.append("</tr></thead><tbody>")
+
+        sb.append("<tr><td>1.</td><td>${esc(plan.intro.title)}<br>${plan.intro.minutes} мин.</td>")
+        sb.append("<td>${ul(plan.intro.content)}</td><td>${ul(plan.intro.trainee)}</td></tr>")
+
+        val mainContent = StringBuilder()
+        val mainTrainee = StringBuilder()
         plan.questions.forEach { q ->
-            stage("Учебный вопрос № ${q.index}. ${esc(q.title)}", q.minutes, q.leader, q.trainee)
+            mainContent.append("<div class=\"q\">${q.index}. ${esc(q.title)} — ${q.minutes} мин.</div>")
+            mainContent.append(ul(q.content))
+            mainTrainee.append(ul(q.trainee))
         }
-        stage("III. ${plan.outro.title}", plan.outro.minutes, plan.outro.leader, plan.outro.trainee)
+        sb.append("<tr><td>2.</td><td>Основная часть<br>${plan.mainMinutes} мин.</td>")
+        sb.append("<td>$mainContent</td><td>$mainTrainee</td></tr>")
 
-        if (i.note.isNotBlank()) sb.append("<h2>Примечания руководителя</h2><p>${esc(i.note)}</p>")
+        sb.append("<tr><td>3.</td><td>${esc(plan.outro.title)}<br>${plan.outro.minutes} мин.</td>")
+        sb.append("<td>${ul(plan.outro.content)}</td><td>${ul(plan.outro.trainee)}</td></tr>")
+        sb.append("</tbody></table>")
 
-        sb.append("<div class=\"sign\"><p>Руководитель занятия: ${esc(i.leader.ifBlank { s.leader })} <span class=\"fill\"></span></p>")
-        sb.append("<p>«___» __________ 20__ г.</p></div>")
+        if (i.note.isNotBlank()) {
+            sb.append("<p style=\"margin-top:10px\"><span class=\"key\">Примечания руководителя:</span> ${esc(i.note)}</p>")
+        }
+
+        sb.append("<div class=\"sign\">Руководитель занятия<br>${esc(i.leader.ifBlank { s.leader })}")
+        sb.append("<div class=\"line\" style=\"width:60%;margin:14px auto\"></div></div>")
 
         if (plan.handout.isNotEmpty()) {
             sb.append("<div class=\"page\"></div><h1>РАЗДАТОЧНЫЙ МАТЕРИАЛ</h1>")
-            sb.append("<p><b>Тема:</b> ${esc(i.topic)}</p>")
+            sb.append("<p><span class=\"key\">Тема:</span> ${esc(i.topic)}</p>")
             plan.handout.forEach { b ->
-                sb.append("<h3>${esc(b.title)}</h3>").append(ul(b.items))
+                sb.append("<p class=\"key\" style=\"margin-top:10px\">${esc(b.title)}</p>").append(ul(b.items))
             }
         }
         if (plan.control.isNotEmpty()) {
             sb.append("<div class=\"page\"></div><h1>КОНТРОЛЬНЫЕ ВОПРОСЫ</h1>")
-            sb.append("<p><b>Тема:</b> ${esc(i.topic)}</p><ol>")
+            sb.append("<p><span class=\"key\">Тема:</span> ${esc(i.topic)}</p><ol>")
             plan.control.forEach { sb.append("<li>${esc(it)}</li>") }
             sb.append("</ol>")
-            sb.append("<p><b>Критерии оценки.</b> «5» — полный правильный ответ; «4» — несущественные неточности; «3» — ответ после наводящих вопросов; «2» — материал не усвоен.</p>")
+            sb.append("<p><span class=\"key\">Критерии оценки.</span> «5» — полный правильный ответ; «4» — несущественные неточности; «3» — ответ после наводящих вопросов; «2» — материал не усвоен.</p>")
         }
         sb.append("</body></html>")
         return sb.toString()
