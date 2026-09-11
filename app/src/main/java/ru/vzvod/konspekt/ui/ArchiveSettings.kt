@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -202,6 +203,8 @@ fun SettingsScreen(
             TextButton(onClick = { confirmClear = true }) { Text("Очистить архив") }
         }
 
+        AboutSection()
+
         Spacer(Modifier.height(40.dp))
     }
 
@@ -379,5 +382,47 @@ private fun BackupSection(onReload: () -> Unit) {
                 color = MaterialTheme.colorScheme.tertiary
             )
         }
+    }
+}
+
+@Composable
+private fun AboutSection() {
+    val context = LocalContext.current
+    var showLicense by remember { mutableStateOf(false) }
+
+    Section("О приложении") {
+        KeyValue("Название", "План-конспект")
+        KeyValue("Версия", "1.0")
+        KeyValue("Разработчик", "В. Д. Кривицкий")
+        KeyValue("Лицензия", "GNU GPL версии 3")
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Свободная программа: её можно использовать, изучать, изменять и передавать " +
+                "другим. Производные работы распространяются на тех же условиях. " +
+                "Программа поставляется без каких-либо гарантий.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        TextButton(onClick = { showLicense = true }) { Text("Текст лицензии") }
+    }
+
+    if (showLicense) {
+        val text = remember {
+            runCatching {
+                context.assets.open("LICENSE").bufferedReader().use { it.readText() }
+            }.getOrElse { "Текст лицензии доступен в файле LICENSE в составе проекта." }
+        }
+        AlertDialog(
+            onDismissRequest = { showLicense = false },
+            title = { Text("GNU General Public License v3") },
+            text = {
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    Text(text, style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLicense = false }) { Text("Закрыть") }
+            }
+        )
     }
 }
