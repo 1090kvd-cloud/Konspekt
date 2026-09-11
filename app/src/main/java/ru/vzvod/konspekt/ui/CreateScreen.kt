@@ -267,7 +267,6 @@ fun CreateScreen(
                         placeholder = {
                             Text(settings.unitName.ifBlank { "личным составом 1 мсв" })
                         },
-                        placeholder = { Text("1 мсв 2 мср") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(10.dp))
