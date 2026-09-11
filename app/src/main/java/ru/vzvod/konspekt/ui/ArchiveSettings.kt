@@ -52,6 +52,7 @@ import java.util.Locale
 fun ArchiveScreen(
     items: List<LessonInput>,
     onOpen: (LessonInput) -> Unit,
+    onEditConditions: (LessonInput) -> Unit,
     onDuplicate: (LessonInput) -> Unit,
     onDelete: (LessonInput) -> Unit,
     modifier: Modifier = Modifier
@@ -74,37 +75,85 @@ fun ArchiveScreen(
     }
 
     val fmt = remember { SimpleDateFormat("d MMMM, HH:mm", Locale("ru")) }
+    var query by remember { mutableStateOf("") }
 
-    LazyColumn(modifier.fillMaxSize()) {
-        items(items, key = { it.id }) { item ->
-            Row(
-                Modifier
+    val shown = run {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) items
+        else items.filter {
+            it.topic.lowercase().contains(q) ||
+                it.lessonTitle.lowercase().contains(q) ||
+                Library.byId(it.disciplineId).name.lowercase().contains(q)
+        }
+    }
+
+    Column(modifier.fillMaxSize()) {
+        if (items.size >= 6) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                label = { Text("Поиск по теме или предмету") },
+                singleLine = true,
+                modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onOpen(item) }
-                    .padding(start = 20.dp, end = 8.dp, top = 14.dp, bottom = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        item.topic.ifBlank { "Без темы" },
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        "${Library.byId(item.disciplineId).name} · ${item.minutes} мин · ${fmt.format(Date(item.createdAt))}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+        }
+
+        if (shown.isEmpty()) {
+            Text(
+                "Ничего не найдено",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(20.dp)
+            )
+            return@Column
+        }
+
+        LazyColumn(Modifier.fillMaxSize()) {
+            items(shown, key = { it.id }) { item ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpen(item) }
+                        .padding(start = 20.dp, end = 8.dp, top = 14.dp, bottom = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        // Заголовок — наименование занятия: у серии по одной теме оно разное.
+                        Text(
+                            item.lessonTitle.ifBlank { item.topic }.ifBlank { "Без темы" },
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (item.lessonTitle.isNotBlank() && item.topic.isNotBlank()) {
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                "ТЕМА ${item.themeNo}: ${item.topic}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            "Занятие ${item.lessonNo} · ${Library.byId(item.disciplineId).short} · " +
+                                "${item.minutes} мин · ${fmt.format(Date(item.createdAt))}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    ArchiveMenu(
+                        onOpen = { onOpen(item) },
+                        onEditConditions = { onEditConditions(item) },
+                        onDuplicate = { onDuplicate(item) },
+                        onDelete = { onDelete(item) }
                     )
                 }
-                ArchiveMenu(
-                    onOpen = { onOpen(item) },
-                    onDuplicate = { onDuplicate(item) },
-                    onDelete = { onDelete(item) }
-                )
+                ThinRule(Modifier.padding(start = 20.dp))
             }
-            ThinRule(Modifier.padding(start = 20.dp))
         }
     }
 }
@@ -143,6 +192,13 @@ fun SettingsScreen(
                 onValueChange = { onChange(settings.copy(approver = it)) },
                 label = { Text("Кто утверждает") },
                 modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Подставляется в новые занятия. В уже сохранённых остаётся то, " +
+                    "что было на момент составления.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -297,7 +353,12 @@ private fun LibrarySection() {
 }
 
 @Composable
-private fun ArchiveMenu(onOpen: () -> Unit, onDuplicate: () -> Unit, onDelete: () -> Unit) {
+private fun ArchiveMenu(
+    onOpen: () -> Unit,
+    onEditConditions: () -> Unit,
+    onDuplicate: () -> Unit,
+    onDelete: () -> Unit
+) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) {
@@ -305,6 +366,10 @@ private fun ArchiveMenu(onOpen: () -> Unit, onDuplicate: () -> Unit, onDelete: (
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(text = { Text("Открыть") }, onClick = { open = false; onOpen() })
+            DropdownMenuItem(
+                text = { Text("Изменить условия") },
+                onClick = { open = false; onEditConditions() }
+            )
             DropdownMenuItem(
                 text = { Text("Сделать копию") },
                 onClick = { open = false; onDuplicate() }

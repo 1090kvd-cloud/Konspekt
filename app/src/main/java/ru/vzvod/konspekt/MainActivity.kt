@@ -130,6 +130,12 @@ fun AppRoot() {
                         tab = Tab.Archive
                     },
                     onEdit = { editing = true },
+                    onConditions = {
+                        // Занятие возвращается в форму: можно поменять время, вопросы, предмет.
+                        form.loadFrom(openPlan)
+                        current = null
+                        tab = Tab.Create
+                    },
                     onBack = { current = null }
                 )
                 return@Surface
@@ -183,14 +189,20 @@ fun AppRoot() {
                 when (tab) {
                     Tab.Create -> CreateScreen(
                         form = form,
+                        settings = store.settings,
                         onBuild = { current = form.toInput(store.settings) },
                         onSeries = { series = true },
+                        onNew = { form.reset(store.settings) },
                         modifier = m
                     )
 
                     Tab.Archive -> ArchiveScreen(
                         items = store.archive,
                         onOpen = { current = it },
+                        onEditConditions = {
+                            form.loadFrom(it)
+                            tab = Tab.Create
+                        },
                         onDuplicate = { current = store.duplicate(it) },
                         onDelete = { store.delete(it.id) },
                         modifier = m

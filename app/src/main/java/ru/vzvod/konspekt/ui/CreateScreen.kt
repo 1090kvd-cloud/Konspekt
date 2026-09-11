@@ -17,9 +17,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Button
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -28,7 +31,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,24 +42,49 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ru.vzvod.konspekt.data.Library
+import ru.vzvod.konspekt.model.Settings
 import ru.vzvod.konspekt.logic.Generator
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun CreateScreen(
     form: FormState,
+    settings: Settings,
     onBuild: () -> Unit,
     onSeries: () -> Unit,
+    onNew: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val discipline = Library.byId(form.disciplineId)
     var showDetails by remember { mutableStateOf(false) }
+    var pickDate by remember { mutableStateOf(false) }
+
+    // Значения из настроек сразу видны в форме, а не только в готовом документе.
+    LaunchedEffect(settings.unitName, settings.leader) {
+        if (form.editingId == null) {
+            if (form.unitName.isBlank()) form.unitName = settings.unitName
+            if (form.leader.isBlank()) form.leader = settings.leader
+        }
+    }
 
     Column(
         modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
     ) {
+        if (form.editingId != null) {
+            Section(
+                "Изменяется сохранённое занятие",
+                "После сборки нажмите «Сохранить» — запись в архиве обновится"
+            ) {
+                TextButton(onClick = onNew) { Text("Начать новое занятие") }
+            }
+        }
+
         Section("Предмет обучения") {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -234,6 +264,9 @@ fun CreateScreen(
                         value = form.unitName,
                         onValueChange = { form.unitName = it },
                         label = { Text("Подразделение") },
+                        placeholder = {
+                            Text(settings.unitName.ifBlank { "личным составом 1 мсв" })
+                        },
                         placeholder = { Text("1 мсв 2 мср") },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -242,6 +275,11 @@ fun CreateScreen(
                         value = form.date,
                         onValueChange = { form.date = it },
                         label = { Text("Дата") },
+                        trailingIcon = {
+                            IconButton(onClick = { pickDate = true }) {
+                                Icon(Icons.Filled.DateRange, "Выбрать дату")
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(10.dp))
@@ -249,6 +287,9 @@ fun CreateScreen(
                         value = form.leader,
                         onValueChange = { form.leader = it },
                         label = { Text("Руководитель занятия") },
+                        placeholder = {
+                            Text(settings.leader.ifBlank { "лейтенант Иванов И. И." })
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -328,6 +369,29 @@ fun CreateScreen(
         )
         Spacer(Modifier.height(28.dp))
     }
+
+    if (pickDate) {
+        val state = rememberDatePickerState()
+        DatePickerDialog(
+            onDismissRequest = { pickDate = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { form.date = formatDate(it) }
+                    pickDate = false
+                }) { Text("Выбрать") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pickDate = false }) { Text("Отмена") }
+            }
+        ) { DatePicker(state = state) }
+    }
+}
+
+/** Календарь отдаёт полночь по UTC — форматируем в той же зоне, иначе съедет день. */
+private fun formatDate(millis: Long): String {
+    val fmt = SimpleDateFormat("d MMMM yyyy 'г.'", Locale("ru"))
+    fmt.timeZone = TimeZone.getTimeZone("UTC")
+    return fmt.format(Date(millis))
 }
 
 /** Живой расчёт: показывает, как время разложится по частям занятия. */

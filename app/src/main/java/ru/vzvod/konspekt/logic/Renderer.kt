@@ -121,15 +121,6 @@ object Renderer {
         appendLine("«2» — материал не усвоен.")
     }
 
-    fun everything(plan: LessonPlan, s: Settings): String = buildString {
-        append(planText(plan, s))
-        if (plan.handout.isNotEmpty()) {
-            appendLine(); appendLine(); append(handoutText(plan, s))
-        }
-        if (plan.control.isNotEmpty()) {
-            appendLine(); appendLine(); append(controlText(plan))
-        }
-    }
 
     /** «по огневой подготовке», «по тактической подготовке» — родительный падеж названия предмета. */
     fun disciplineCase(name: String): String {
@@ -158,7 +149,10 @@ object Renderer {
         val unit = i.unitName.ifBlank { s.unitName }
         val sb = StringBuilder()
 
-        sb.append("<html><head><meta charset=\"utf-8\"><style>")
+        // Word берёт кодировку из http-equiv; без него кириллица превращается в иероглифы.
+        sb.append("<html><head>")
+        sb.append("<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">")
+        sb.append("<meta charset=\"utf-8\"><style>")
         sb.append("@page{size:A4 " + (if (land) "landscape" else "portrait") + ";margin:" + (if (land) "12mm" else "20mm 15mm 15mm 25mm") + "}")
         sb.append("body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.3;color:#000;margin:0;text-align:justify}")
         sb.append(".approve{margin-left:55%;white-space:pre-line;margin-bottom:18px}")

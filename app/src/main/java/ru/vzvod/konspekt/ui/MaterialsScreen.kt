@@ -25,10 +25,14 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Slideshow
 import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -55,6 +59,8 @@ fun MaterialsScreen(modifier: Modifier = Modifier) {
     var filter by remember { mutableStateOf<String?>(null) }
     var pendingDiscipline by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf("") }
+    var renaming by remember { mutableStateOf<Material?>(null) }
+    var retargeting by remember { mutableStateOf<Material?>(null) }
 
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -104,7 +110,7 @@ fun MaterialsScreen(modifier: Modifier = Modifier) {
 
             if (Materials.all.isEmpty()) {
                 Column(
-                    Modifier.weight(1f).padding(horizontal = 32.dp),
+                    Modifier.weight(1f).padding(start = 32.dp, end = 32.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text("Материалов пока нет", style = MaterialTheme.typography.headlineSmall)
@@ -143,24 +149,121 @@ fun MaterialsScreen(modifier: Modifier = Modifier) {
                             m = m,
                             onOpen = { Materials.open(context, m) },
                             onSend = { Materials.send(context, m) },
+                            onRename = { renaming = m },
+                            onRetarget = { retargeting = m },
                             onDelete = { Materials.remove(context, m.id) }
                         )
                         ThinRule(Modifier.padding(start = 62.dp))
                     }
-                    item { Spacer(Modifier.height(90.dp)) }
+                    item { Spacer(Modifier.height(96.dp)) }
                 }
             }
         }
 
-        ExtendedFloatingActionButton(
+        // Круглая плавающая кнопка: не закрывает текст и всегда под большим пальцем.
+        FloatingActionButton(
             onClick = { picker.launch(arrayOf("*/*")) },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(20.dp),
-            icon = { Icon(Icons.Filled.Add, null) },
-            text = { Text("Приложить файл") }
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            shape = androidx.compose.foundation.shape.CircleShape
+        ) {
+            Icon(Icons.Filled.Add, "Приложить файл", modifier = Modifier.size(26.dp))
+        }
+    }
+
+    renaming?.let { m ->
+        RenameDialog(
+            current = m.title,
+            onDismiss = { renaming = null },
+            onConfirm = { newTitle ->
+                Materials.rename(context, m.id, newTitle)
+                renaming = null
+            }
         )
     }
+
+    retargeting?.let { m ->
+        RetargetDialog(
+            current = m.disciplineId,
+            onDismiss = { retargeting = null },
+            onPick = { id ->
+                Materials.retarget(context, m.id, id)
+                retargeting = null
+            }
+        )
+    }
+}
+
+@Composable
+private fun RenameDialog(
+    current: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var text by remember { mutableStateOf(current) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Наименование материала") },
+        text = {
+            Column {
+                Text(
+                    "Под этим наименованием материал попадёт в материальное обеспечение конспекта.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    singleLine = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(text) },
+                enabled = text.isNotBlank()
+            ) { Text("Сохранить") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RetargetDialog(
+    current: String?,
+    onDismiss: () -> Unit,
+    onPick: (String?) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("К какому предмету относится") },
+        text = {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                FilterChip(
+                    selected = current == null,
+                    onClick = { onPick(null) },
+                    label = { Text("Общий") }
+                )
+                Library.all.forEach { d ->
+                    FilterChip(
+                        selected = current == d.id,
+                        onClick = { onPick(d.id) },
+                        label = { Text(d.short) }
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } }
+    )
 }
 
 @Composable
@@ -168,6 +271,8 @@ private fun MaterialRow(
     m: Material,
     onOpen: () -> Unit,
     onSend: () -> Unit,
+    onRename: () -> Unit,
+    onRetarget: () -> Unit,
     onDelete: () -> Unit
 ) {
     var menu by remember { mutableStateOf(false) }
@@ -196,7 +301,7 @@ private fun MaterialRow(
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                "$label · ${Materials.kindText(m.mime, m.title)} · ${Materials.sizeText(m.size)}",
+                "$label · ${Materials.kindText(m)} · ${Materials.sizeText(m.size)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -209,6 +314,14 @@ private fun MaterialRow(
                 DropdownMenuItem(
                     text = { Text("Открыть") },
                     onClick = { menu = false; onOpen() }
+                )
+                DropdownMenuItem(
+                    text = { Text("Переименовать") },
+                    onClick = { menu = false; onRename() }
+                )
+                DropdownMenuItem(
+                    text = { Text("Сменить предмет") },
+                    onClick = { menu = false; onRetarget() }
                 )
                 DropdownMenuItem(
                     text = { Text("Отправить") },

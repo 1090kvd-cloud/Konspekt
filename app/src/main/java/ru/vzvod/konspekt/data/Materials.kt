@@ -88,7 +88,8 @@ object Materials {
 
         val material = Material(
             id = id,
-            title = name,
+            // В документ уходит наименование, поэтому чистим его сразу.
+            title = cleanName(name),
             storedName = stored,
             mime = cr.getType(uri) ?: guessMime(name),
             size = target.length(),
@@ -181,15 +182,22 @@ object Materials {
         else -> "application/octet-stream"
     }
 
+    /** «План-конспект_материальная_часть.doc» -> «План-конспект материальная часть». */
+    fun cleanName(fileName: String): String {
+        val base = fileName.substringBeforeLast('.')
+        return base.replace('_', ' ').replace('-', ' ').trim().ifEmpty { fileName }
+    }
+
     fun sizeText(bytes: Long): String = when {
         bytes >= 1_048_576 -> String.format("%.1f МБ", bytes / 1_048_576.0)
         bytes >= 1024 -> "${bytes / 1024} КБ"
         else -> "$bytes Б"
     }
 
-    fun kindText(mime: String, title: String): String {
-        val ext = title.substringAfterLast('.', "").uppercase()
+    /** Тип берём из сохранённого файла: наименование уже без расширения. */
+    fun kindText(m: Material): String {
+        val ext = m.storedName.substringAfterLast('.', "").uppercase()
         if (ext.isNotEmpty() && ext.length <= 5) return ext
-        return mime.substringAfterLast('/').uppercase()
+        return m.mime.substringAfterLast('/').uppercase()
     }
 }

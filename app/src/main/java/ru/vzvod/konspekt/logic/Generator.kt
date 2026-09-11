@@ -1,6 +1,7 @@
 package ru.vzvod.konspekt.logic
 
 import ru.vzvod.konspekt.data.Library
+import ru.vzvod.konspekt.data.Materials
 import ru.vzvod.konspekt.model.HandoutBlock
 import ru.vzvod.konspekt.model.LessonInput
 import ru.vzvod.konspekt.model.LessonPlan
@@ -96,7 +97,10 @@ object Generator {
             place = place,
             method = method,
             goals = list(Keys.GOALS, buildGoals(d, ::t, topic)),
-            provision = list(Keys.PROVISION, (d.materials + d.references).distinct()),
+            provision = list(
+                Keys.PROVISION,
+                (d.materials + d.references + attachedTitles(input.disciplineId)).distinct()
+            ),
             safety = list(Keys.SAFETY, if (input.includeSafety) d.safety else emptyList()),
             intro = intro,
             questions = questions,
@@ -226,6 +230,15 @@ object Generator {
     }
 
     // --- вспомогательное ---
+
+    /**
+     * Приложенные к предмету файлы идут в материальное обеспечение:
+     * методичка, по которой проводится занятие, должна стоять в документе.
+     */
+    private fun attachedTitles(disciplineId: String): List<String> =
+        Materials.forDiscipline(disciplineId).map { m ->
+            m.title.substringBeforeLast('.').replace('_', ' ').trim()
+        }.filter { it.isNotEmpty() }
 
     /** Раскладывает минуты основной части по вопросам кратно 5, остаток — последнему. */
     fun split(main: Int, n: Int): List<Int> {

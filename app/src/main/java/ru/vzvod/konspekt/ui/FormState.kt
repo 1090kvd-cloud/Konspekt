@@ -36,6 +36,9 @@ class FormState(settings: Settings) {
 
     val customQuestions = mutableStateListOf<String>()
 
+    /** Ручные правки текста переносятся при пересборке занятия, иначе они бы пропали. */
+    private var edits: Map<String, String> = emptyMap()
+
     fun effectiveQuestionCount(): Int {
         val filled = customQuestions.count { it.isNotBlank() }
         return if (filled > 0) filled else questionCount
@@ -60,7 +63,8 @@ class FormState(settings: Settings) {
         includeHandout = includeHandout,
         includeControl = includeControl,
         includeSafety = includeSafety,
-        note = note.trim()
+        note = note.trim(),
+        edits = this.edits
     )
 
     fun loadFrom(i: LessonInput) {
@@ -81,6 +85,7 @@ class FormState(settings: Settings) {
         includeHandout = i.includeHandout
         includeControl = i.includeControl
         includeSafety = i.includeSafety
+        edits = i.edits
         customQuestions.clear()
         customQuestions.addAll(i.customQuestions)
     }
@@ -95,13 +100,14 @@ class FormState(settings: Settings) {
         questionCount = 3
         place = ""
         method = ""
-        unitName = ""
+        unitName = settings.unitName
         date = ""
-        leader = ""
+        leader = settings.leader
         note = ""
         includeHandout = false
         includeControl = true
         includeSafety = true
+        edits = emptyMap()
         customQuestions.clear()
     }
 }

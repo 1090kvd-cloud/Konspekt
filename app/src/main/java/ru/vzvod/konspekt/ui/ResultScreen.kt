@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -62,6 +63,7 @@ fun ResultScreen(
     savedAlready: Boolean,
     onSave: () -> Unit,
     onEdit: () -> Unit,
+    onConditions: () -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -88,6 +90,8 @@ fun ResultScreen(
         if (uri != null) {
             runCatching {
                 context.contentResolver.openOutputStream(uri)?.use {
+                    // Метка BOM: по ней Word и мобильные офисы опознают UTF-8 без вопросов.
+                    it.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
                     it.write(Renderer.html(plan, settings).toByteArray(Charsets.UTF_8))
                 }
             }
@@ -117,6 +121,9 @@ fun ResultScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onConditions) {
+                        Icon(Icons.Filled.Tune, "Изменить условия занятия")
+                    }
                     IconButton(onClick = onEdit) {
                         Icon(Icons.Filled.EditNote, "Править текст")
                     }
@@ -322,7 +329,7 @@ private fun PlanView(plan: LessonPlan, settings: Settings) {
                     Column(Modifier.weight(1f)) {
                         Text(m.title, style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            "${Materials.kindText(m.mime, m.title)} · ${Materials.sizeText(m.size)}",
+                            "${Materials.kindText(m)} · ${Materials.sizeText(m.size)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
