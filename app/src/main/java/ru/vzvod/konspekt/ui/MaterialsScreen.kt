@@ -2,6 +2,16 @@ package ru.vzvod.konspekt.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -110,8 +120,10 @@ fun MaterialsScreen(modifier: Modifier = Modifier) {
 
             if (Materials.all.isEmpty()) {
                 Column(
-                    Modifier.weight(1f).padding(start = 32.dp, end = 32.dp, bottom = 96.dp),
-                    verticalArrangement = Arrangement.Center
+                    Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 40.dp)
                 ) {
                     Text("Материалов пока нет", style = MaterialTheme.typography.headlineSmall)
                     Spacer(Modifier.height(8.dp))
@@ -160,18 +172,11 @@ fun MaterialsScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        // Круглая плавающая кнопка: не закрывает текст и всегда под большим пальцем.
-        FloatingActionButton(
+        // Кнопка живёт у правого края: свайп влево вытягивает её, вправо — убирает.
+        SideActionButton(
             onClick = { picker.launch(arrayOf("*/*")) },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(20.dp),
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            shape = androidx.compose.foundation.shape.CircleShape
-        ) {
-            Icon(Icons.Filled.Add, "Приложить файл", modifier = Modifier.size(26.dp))
-        }
+            modifier = Modifier.align(Alignment.CenterEnd)
+        )
     }
 
     renaming?.let { m ->
@@ -342,4 +347,37 @@ private fun iconFor(mime: String): ImageVector = when {
     mime.contains("spreadsheet") || mime.contains("excel") -> Icons.Filled.TableChart
     mime.contains("presentation") || mime.contains("powerpoint") -> Icons.Filled.Slideshow
     else -> Icons.Filled.Description
+}
+
+/**
+ * Плавающая кнопка у края экрана. В покое утоплена за правый край и не закрывает текст.
+ * Свайп влево — выезжает целиком, свайп вправо или повторное нажатие — прячется.
+ */
+@Composable
+private fun SideActionButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    var out by remember { mutableStateOf(false) }
+    val shift by animateDpAsState(if (out) 0.dp else 30.dp, label = "shift")
+    val alpha by animateFloatAsState(if (out) 1f else 0.55f, label = "alpha")
+
+    FloatingActionButton(
+        onClick = {
+            if (out) onClick() else out = true
+        },
+        modifier = modifier
+            .padding(vertical = 20.dp)
+            .offset(x = shift)
+            .alpha(alpha)
+            .draggable(
+                orientation = Orientation.Horizontal,
+                state = rememberDraggableState { delta ->
+                    if (delta < -3f) out = true
+                    if (delta > 3f) out = false
+                }
+            ),
+        containerColor = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        shape = CircleShape
+    ) {
+        Icon(Icons.Filled.Add, "Приложить файл", modifier = Modifier.size(26.dp))
+    }
 }
