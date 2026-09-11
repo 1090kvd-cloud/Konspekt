@@ -120,6 +120,7 @@ object Materials {
     fun remove(context: Context, id: String) {
         val m = all.firstOrNull { it.id == id } ?: return
         File(dir(context), m.storedName).delete()
+        ru.vzvod.konspekt.logic.TextExtract.forget(context, id)
         all.removeAll { it.id == id }
         persist(context)
     }
@@ -157,6 +158,9 @@ object Materials {
         }
         context.startActivity(Intent.createChooser(intent, "Отправить материал"))
     }
+
+    fun nameOf(context: Context, uri: Uri): String =
+        displayName(context.contentResolver, uri) ?: "Документ"
 
     private fun displayName(cr: ContentResolver, uri: Uri): String? = runCatching {
         cr.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->

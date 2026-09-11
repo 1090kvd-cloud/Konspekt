@@ -172,6 +172,21 @@ fun ResultScreen(
         containerColor = MaterialTheme.colorScheme.background
     ) { inner ->
         Column(Modifier.padding(inner).fillMaxSize()) {
+
+            val gaps = missingFields(plan, settings)
+            if (gaps.isNotEmpty()) {
+                Text(
+                    "Не заполнено: ${gaps.joinToString(", ")}. " +
+                        "Документ распечатается с пустыми местами.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.tertiaryContainer)
+                        .padding(horizontal = 18.dp, vertical = 8.dp)
+                )
+            }
+
             if (tabs.size > 1) {
                 TabRow(
                     selectedTabIndex = tab.coerceAtMost(tabs.lastIndex),
@@ -473,4 +488,16 @@ private fun ControlView(plan: LessonPlan) {
         Bullet("«2» — материал не усвоен.")
         Spacer(Modifier.height(30.dp))
     }
+}
+
+/** Что руководитель забыл заполнить. Проверяем перед печатью, а не после. */
+private fun missingFields(plan: LessonPlan, settings: Settings): List<String> {
+    val i = plan.input
+    val out = ArrayList<String>()
+    if (i.date.isBlank()) out.add("дата")
+    if (i.unitName.ifBlank { settings.unitName }.isBlank()) out.add("подразделение")
+    if (i.leader.ifBlank { settings.leader }.isBlank()) out.add("руководитель")
+    if (i.lessonTitle.isBlank()) out.add("наименование занятия")
+    if (plan.place.isBlank()) out.add("место")
+    return out
 }

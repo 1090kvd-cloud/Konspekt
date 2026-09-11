@@ -8,17 +8,17 @@ data class Discipline(
     val id: String,
     val name: String,
     val short: String,
+    /** Типовые темы занятий по предмету — подсказки при заполнении формы. */
+    val topics: List<String> = emptyList(),
     val places: List<String>,
     val methods: List<String>,
     val eduGoals: List<String>,
     val upGoals: List<String>,
-    val metGoals: List<String>,
     val questionTemplates: List<String>,
     val materials: List<String>,
     val references: List<String>,
     val safety: List<String>,
     val practiceHints: List<String>,
-    val handout: List<HandoutBlock>,
     val control: List<String>,
     /** Название в дательном падеже для шапки: «занятия по огневой подготовке».
      *  Пусто — приложение образует само. */
@@ -91,7 +91,6 @@ data class LessonPlan(
     val intro: Stage,
     val questions: List<QuestionBlock>,
     val outro: Stage,
-    val handout: List<HandoutBlock>,
     val control: List<String>
 ) {
     val mainMinutes: Int get() = questions.sumOf { it.minutes }

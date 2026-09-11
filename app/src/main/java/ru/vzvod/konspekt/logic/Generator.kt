@@ -105,7 +105,7 @@ object Generator {
             intro = intro,
             questions = questions,
             outro = outro,
-            handout = if (input.includeHandout) handout(d.handout, topic, titles) else emptyList(),
+            handout = if (input.includeHandout) handout(topic, questions, control) else emptyList(),
             control = list(Keys.CONTROL, if (input.includeControl) d.control.map(::t).take(4) else emptyList())
         )
     }
@@ -217,16 +217,49 @@ object Generator {
 
     // --- раздатка ---
 
-    private fun handout(blocks: List<HandoutBlock>, topic: String, titles: List<String>): List<HandoutBlock> {
+    /**
+     * Раздатка собирается из содержания учебных вопросов — но только из того,
+     * что руководитель вписал сам. Методические действия («Излагаю», «Организую»)
+     * обучаемым не раздают, поэтому они отсеиваются. Пока своего текста нет,
+     * раздатки нет вовсе — пустой лист с прочерками никому не нужен.
+     */
+    private fun handout(
+        topic: String,
+        questions: List<QuestionBlock>,
+        control: List<String>
+    ): List<HandoutBlock> {
+        val body = questions.mapNotNull { q ->
+            val own = q.content.filterNot(::isTeacherAction)
+            if (own.isEmpty()) null
+            else HandoutBlock("${q.index}. ${q.title}", own)
+        }
+        if (body.isEmpty()) return emptyList()
+
         val head = HandoutBlock(
             "Тема и учебные вопросы",
-            listOf("Тема: $topic") + titles.mapIndexed { i, s -> "${i + 1}. $s" }
+            listOf("Тема: $topic") + questions.map { "${it.index}. ${it.title}" }
         )
-        val tail = HandoutBlock(
-            "Место для записей обучаемого",
-            List(6) { "________________________________________________________" }
+        val tail = ArrayList<HandoutBlock>()
+        if (control.isNotEmpty()) tail.add(HandoutBlock("Проверь себя", control))
+        tail.add(
+            HandoutBlock(
+                "Место для записей",
+                List(5) { "________________________________________________________" }
+            )
         )
-        return listOf(head) + blocks.map { b -> b.copy(items = b.items.map { it.replace("{t}", topic) }) } + tail
+        return listOf(head) + body + tail
+    }
+
+    private val teacherStarts = listOf(
+        "излагаю", "довожу", "показываю", "организую", "контролирую", "провожу",
+        "подвожу", "добиваюсь", "обхожу", "объявляю", "принимаю", "проверяю",
+        "разбираю", "напоминаю", "отвечаю", "ставлю", "метод отработки",
+        "при грубых", "самостоятельно выполняют", "слушают", "записывают"
+    )
+
+    private fun isTeacherAction(line: String): Boolean {
+        val l = line.trim().lowercase()
+        return teacherStarts.any { l.startsWith(it) }
     }
 
     // --- вспомогательное ---

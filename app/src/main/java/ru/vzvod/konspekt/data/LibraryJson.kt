@@ -3,7 +3,6 @@ package ru.vzvod.konspekt.data
 import org.json.JSONArray
 import org.json.JSONObject
 import ru.vzvod.konspekt.model.Discipline
-import ru.vzvod.konspekt.model.HandoutBlock
 
 /**
  * Формат обмена библиотекой предметов.
@@ -53,17 +52,16 @@ object LibraryJson {
             id = req("id"),
             name = name,
             short = o.optString("short", "").ifBlank { name },
+            topics = strings(o, "topics"),
             places = strings(o, "places").ifEmpty { listOf("Класс подготовки подразделения") },
             methods = strings(o, "methods").ifEmpty { listOf("Групповое занятие") },
             eduGoals = strings(o, "eduGoals"),
             upGoals = strings(o, "upGoals"),
-            metGoals = strings(o, "metGoals"),
             questionTemplates = questions,
             materials = strings(o, "materials"),
             references = strings(o, "references"),
             safety = strings(o, "safety"),
             practiceHints = strings(o, "hints"),
-            handout = handout(o.optJSONArray("handout")),
             control = strings(o, "control"),
             dative = o.optString("dative", "").trim()
         )
@@ -79,41 +77,25 @@ object LibraryJson {
         return out
     }
 
-    private fun handout(arr: JSONArray?): List<HandoutBlock> {
-        if (arr == null) return emptyList()
-        val out = ArrayList<HandoutBlock>(arr.length())
-        for (k in 0 until arr.length()) {
-            val o = arr.optJSONObject(k) ?: continue
-            val title = o.optString("title", "").trim()
-            val items = strings(o, "items")
-            if (title.isNotEmpty() && items.isNotEmpty()) out.add(HandoutBlock(title, items))
-        }
-        return out
-    }
 
     fun encode(version: Int, updated: String, disciplines: List<Discipline>): String {
         val arr = JSONArray()
         disciplines.forEach { d ->
-            val handout = JSONArray()
-            d.handout.forEach { b ->
-                handout.put(JSONObject().put("title", b.title).put("items", JSONArray(b.items)))
-            }
             arr.put(
                 JSONObject()
                     .put("id", d.id)
                     .put("name", d.name)
                     .put("short", d.short)
+                    .put("topics", JSONArray(d.topics))
                     .put("places", JSONArray(d.places))
                     .put("methods", JSONArray(d.methods))
                     .put("eduGoals", JSONArray(d.eduGoals))
                     .put("upGoals", JSONArray(d.upGoals))
-                    .put("metGoals", JSONArray(d.metGoals))
                     .put("questions", JSONArray(d.questionTemplates))
                     .put("materials", JSONArray(d.materials))
                     .put("references", JSONArray(d.references))
                     .put("safety", JSONArray(d.safety))
                     .put("hints", JSONArray(d.practiceHints))
-                    .put("handout", handout)
                     .put("control", JSONArray(d.control))
                     .put("dative", d.dative)
             )

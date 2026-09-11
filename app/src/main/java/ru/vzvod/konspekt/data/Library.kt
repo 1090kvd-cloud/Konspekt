@@ -18,7 +18,7 @@ import java.io.File
  */
 object Library {
 
-    const val BUILT_IN_VERSION = 1
+    const val BUILT_IN_VERSION = 2
 
     var all by mutableStateOf(Disciplines.all)
         private set

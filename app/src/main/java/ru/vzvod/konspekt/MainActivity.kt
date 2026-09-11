@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,12 +77,19 @@ fun AppRoot() {
     val store = remember { Store(context) }
     // Библиотека предметов: сначала файл на телефоне, иначе встроенный набор.
     remember { Library.load(context); Materials.load(context); true }
-    val form = remember { FormState(store.settings) }
+    val form = remember {
+        FormState(store.settings).also { f -> store.draft?.let { f.loadFrom(it) } }
+    }
 
     var tab by remember { mutableStateOf(Tab.Create) }
     var current by remember { mutableStateOf<LessonInput?>(null) }
     var editing by remember { mutableStateOf(false) }
     var series by remember { mutableStateOf(false) }
+
+    // Черновик пишется при каждом переходе между вкладками: набранное не пропадёт.
+    LaunchedEffect(tab) {
+        if (form.topic.isNotBlank()) store.saveDraft(form.toInput(store.settings))
+    }
 
     KonspektTheme(dark = store.settings.darkTheme) {
         Surface(color = MaterialTheme.colorScheme.background) {
@@ -111,6 +119,7 @@ fun AppRoot() {
                     onSave = { edits ->
                         val updated = openPlan.copy(edits = edits)
                         current = updated
+                        store.saveDraft(updated)
                         // Если занятие уже в архиве, правки сохраняются вместе с ним.
                         if (store.archive.any { it.id == updated.id }) store.save(updated)
                         editing = false
@@ -190,7 +199,11 @@ fun AppRoot() {
                     Tab.Create -> CreateScreen(
                         form = form,
                         settings = store.settings,
-                        onBuild = { current = form.toInput(store.settings) },
+                        onBuild = {
+                            val input = form.toInput(store.settings)
+                            store.saveDraft(input)
+                            current = input
+                        },
                         onSeries = { series = true },
                         onNew = { form.reset(store.settings) },
                         modifier = m
@@ -205,6 +218,7 @@ fun AppRoot() {
                         },
                         onDuplicate = { current = store.duplicate(it) },
                         onDelete = { store.delete(it.id) },
+                        onImported = { list -> list.reversed().forEach { store.save(it) } },
                         modifier = m
                     )
 

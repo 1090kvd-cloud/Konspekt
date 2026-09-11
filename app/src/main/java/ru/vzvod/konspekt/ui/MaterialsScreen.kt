@@ -72,13 +72,15 @@ fun MaterialsScreen(modifier: Modifier = Modifier) {
     var renaming by remember { mutableStateOf<Material?>(null) }
     var retargeting by remember { mutableStateOf<Material?>(null) }
 
+    // Несколько файлов за раз: методички обычно лежат пачкой.
     val picker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) {
-            Materials.add(context, uri, pendingDiscipline)
-                .onFailure { error = it.message ?: "Не удалось приложить файл" }
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        var failed = 0
+        uris.forEach { uri ->
+            Materials.add(context, uri, pendingDiscipline).onFailure { failed++ }
         }
+        error = if (failed > 0) "Не удалось приложить файлов: $failed" else ""
     }
 
     val shown = if (filter == null) Materials.all.toList()

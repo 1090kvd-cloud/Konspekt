@@ -21,6 +21,15 @@ class Store(context: Context) {
 
     val archive = mutableStateListOf<LessonInput>()
 
+    /** Незаконченное занятие. Переживает выход из приложения, в архив не попадает. */
+    var draft by mutableStateOf<LessonInput?>(null)
+        private set
+
+    fun saveDraft(item: LessonInput?) {
+        draft = item
+        persist()
+    }
+
     init {
         load()
     }
@@ -44,6 +53,8 @@ class Store(context: Context) {
     fun save(item: LessonInput) {
         val idx = archive.indexOfFirst { it.id == item.id }
         if (idx >= 0) archive[idx] = item else archive.add(0, item)
+        // Занятие легло в архив — черновик больше не нужен.
+        if (draft?.id == item.id) draft = null
         persist()
     }
 
@@ -75,6 +86,7 @@ class Store(context: Context) {
                     landscape = s.optBoolean("landscape", false)
                 )
             }
+            root.optJSONObject("draft")?.let { draft = fromJson(it) }
             val arr = root.optJSONArray("archive") ?: JSONArray()
             archive.clear()
             for (k in 0 until arr.length()) {
@@ -95,6 +107,7 @@ class Store(context: Context) {
                     .put("darkTheme", settings.darkTheme)
                     .put("landscape", settings.landscape)
             )
+            draft?.let { root.put("draft", toJson(it)) }
             val arr = JSONArray()
             archive.forEach { arr.put(toJson(it)) }
             root.put("archive", arr)

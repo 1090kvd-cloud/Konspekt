@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -20,6 +22,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -42,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ru.vzvod.konspekt.data.Library
+import ru.vzvod.konspekt.data.Materials
 import ru.vzvod.konspekt.model.Settings
 import ru.vzvod.konspekt.logic.Generator
 import java.text.SimpleDateFormat
@@ -62,6 +66,7 @@ fun CreateScreen(
     val discipline = Library.byId(form.disciplineId)
     var showDetails by remember { mutableStateOf(false) }
     var pickDate by remember { mutableStateOf(false) }
+    var pickTopic by remember { mutableStateOf(false) }
 
     // Значения из настроек сразу видны в форме, а не только в готовом документе.
     LaunchedEffect(settings.unitName, settings.leader) {
@@ -100,6 +105,18 @@ fun CreateScreen(
             }
         }
 
+        val attached = Materials.forDiscipline(form.disciplineId).size
+        if (attached > 0) {
+            Text(
+                "Приложено материалов по предмету: $attached. " +
+                    "Их наименования войдут в материальное обеспечение, " +
+                    "а текст можно взять при правке конспекта.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp)
+            )
+        }
+
         Section("Тема занятия", "Идёт в документ строкой «ТЕМА N:»") {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
@@ -128,6 +145,9 @@ fun CreateScreen(
                 minLines = 2,
                 textStyle = MaterialTheme.typography.bodyLarge
             )
+            if (discipline.topics.isNotEmpty()) {
+                TextButton(onClick = { pickTopic = true }) { Text("Выбрать типовую тему") }
+            }
             Spacer(Modifier.height(10.dp))
             OutlinedTextField(
                 value = form.lessonTitle,
@@ -369,6 +389,14 @@ fun CreateScreen(
         Spacer(Modifier.height(28.dp))
     }
 
+    if (pickTopic) {
+        TopicPickDialog(
+            topics = discipline.topics,
+            onPick = { form.topic = it; pickTopic = false },
+            onDismiss = { pickTopic = false }
+        )
+    }
+
     if (pickDate) {
         val state = rememberDatePickerState()
         DatePickerDialog(
@@ -400,4 +428,33 @@ private fun timeBreakdown(minutes: Int, questions: Int): String {
     val main = maxOf(5, total - edge * 2)
     val slices = Generator.split(main, questions)
     return "Вводная $edge · основная $main (${slices.joinToString("+")}) · заключительная $edge"
+}
+
+/** Типовые темы предмета: выбрать быстрее, чем набирать. Текст потом правится. */
+@Composable
+private fun TopicPickDialog(
+    topics: List<String>,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Типовые темы") },
+        text = {
+            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                topics.forEach { t ->
+                    Text(
+                        t,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(t) }
+                            .padding(vertical = 10.dp)
+                    )
+                    ThinRule()
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } }
+    )
 }

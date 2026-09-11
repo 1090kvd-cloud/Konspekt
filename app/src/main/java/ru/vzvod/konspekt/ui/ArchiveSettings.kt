@@ -35,13 +35,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import ru.vzvod.konspekt.data.Library
+import ru.vzvod.konspekt.data.Materials
+import ru.vzvod.konspekt.logic.LessonImport
+import ru.vzvod.konspekt.logic.TextExtract
 import ru.vzvod.konspekt.model.LessonInput
 import ru.vzvod.konspekt.model.Settings
 import java.text.SimpleDateFormat
@@ -55,8 +62,46 @@ fun ArchiveScreen(
     onEditConditions: (LessonInput) -> Unit,
     onDuplicate: (LessonInput) -> Unit,
     onDelete: (LessonInput) -> Unit,
+    onImported: (List<LessonInput>) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var importNote by remember { mutableStateOf("") }
+
+    val importer = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            importNote = "Разбираю файлы…"
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    val lessons = ArrayList<LessonInput>()
+                    val notes = ArrayList<String>()
+                    uris.forEach { uri ->
+                        val name = Materials.nameOf(context, uri)
+                        when (val t = TextExtract.fromUri(context, uri, name)) {
+                            is TextExtract.Result.Unsupported -> notes.add("$name — ${t.reason}")
+                            is TextExtract.Result.Ok -> {
+                                val out = LessonImport.parse(t.text, name)
+                                out.lesson?.let { lessons.add(it) }
+                                notes.add(out.note)
+                            }
+                        }
+                    }
+                    lessons to notes
+                }
+                onImported(result.first)
+                importNote = if (result.first.isEmpty()) {
+                    "Ничего не загружено. " + result.second.joinToString("; ")
+                } else {
+                    "Загружено конспектов: ${result.first.size}. " +
+                        result.second.take(4).joinToString("; ")
+                }
+            }
+        }
+    }
+
     if (items.isEmpty()) {
         Column(
             modifier.fillMaxSize().padding(32.dp),
@@ -70,6 +115,18 @@ fun ArchiveScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Spacer(Modifier.height(16.dp))
+            TextButton(onClick = { importer.launch(arrayOf("*/*")) }) {
+                Text("Загрузить старые конспекты из файлов")
+            }
+            if (importNote.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    importNote,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
         }
         return
     }
@@ -88,6 +145,19 @@ fun ArchiveScreen(
     }
 
     Column(modifier.fillMaxSize()) {
+        Row(Modifier.padding(start = 8.dp, end = 8.dp)) {
+            TextButton(onClick = { importer.launch(arrayOf("*/*")) }) {
+                Text("Загрузить из файлов")
+            }
+        }
+        if (importNote.isNotBlank()) {
+            Text(
+                importNote,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp)
+            )
+        }
         if (items.size >= 6) {
             OutlinedTextField(
                 value = query,
