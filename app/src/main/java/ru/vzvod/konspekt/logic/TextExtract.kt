@@ -50,12 +50,14 @@ object TextExtract {
                 "txt", "md", "csv", "log" -> Result.Ok(readAsText(source.readBytes()))
                 "html", "htm", "xhtml" -> Result.Ok(stripTags(readAsText(source.readBytes())))
                 "doc" -> readDoc(source)
-                "docx" -> readDocx(source, context)
+                "docx" -> readDocx(source)
                 "rtf" -> Result.Ok(readRtf(readAsText(source.readBytes())))
-                "pdf" -> recognized(context) { Ocr.fromPdf(it, source) }
-                    ?: Result.Unsupported("PDF не распознался. Сохраните методичку в .docx")
-                "jpg", "jpeg", "png", "webp", "bmp" -> recognized(context) { Ocr.fromImage(it, source) }
-                    ?: Result.Unsupported("Текст на снимке не распознался")
+                "pdf" -> Result.Unsupported(
+                    "PDF приложение не читает. Приложите методичку в .docx или .txt"
+                )
+                "jpg", "jpeg", "png", "webp", "gif", "bmp" -> Result.Unsupported(
+                    "Это изображение — текста в нём нет"
+                )
                 else -> Result.Unsupported("Формат .$ext не разбирается")
             }
         }.getOrElse { Result.Unsupported("Файл не читается") }
@@ -81,13 +83,6 @@ object TextExtract {
         }
     }
 
-    /** Распознавание идёт долго, поэтому результат сразу уходит в кеш выше по стеку. */
-    private fun recognized(context: Context?, run: (Context) -> String?): Result? {
-        if (context == null) return null
-        val text = run(context) ?: return null
-        return if (text.isBlank()) null else Result.Ok(text)
-    }
-
     fun forget(context: Context, id: String) {
         runCatching { cacheFile(context, id).delete() }
     }
@@ -109,9 +104,8 @@ object TextExtract {
     }
 
     /** .docx — это zip, текст лежит в word/document.xml. */
-    private fun readDocx(file: File, context: Context?): Result {
-        // Если есть куда сохранить рисунки, берём разметку с метками вместо картинок.
-        val xml = (context?.let { DocxImages.extract(it, file) }) ?: plainDocx(file)
+    private fun readDocx(file: File): Result {
+        val xml = plainDocx(file)
             ?: return Result.Unsupported("Внутри .docx нет текстовой части")
         val withBreaks = xml
             .replace(Regex("<w:tab[^>]*/>"), " ")

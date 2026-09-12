@@ -28,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -183,11 +182,6 @@ fun DocHeading(text: String, trailing: String? = null) {
 /** Маркированная строка документа. */
 @Composable
 fun Bullet(text: String, marker: String = "—", color: Color? = null) {
-    val image = ru.vzvod.konspekt.logic.DocxImages.nameIn(text)
-    if (image != null) {
-        LessonImage(image)
-        return
-    }
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
         Text(
             marker,
@@ -219,28 +213,3 @@ fun KeyValue(key: String, value: String) {
     }
 }
 
-/** Рисунок из загруженного конспекта — показываем на месте его метки. */
-@Composable
-fun LessonImage(name: String) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val bitmap = androidx.compose.runtime.remember(name) {
-        ru.vzvod.konspekt.logic.DocxImages.file(context, name)?.let { f ->
-            runCatching { android.graphics.BitmapFactory.decodeFile(f.absolutePath) }.getOrNull()
-        }
-    }
-    if (bitmap == null) {
-        Text(
-            "[рисунок не найден]",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        return
-    }
-    androidx.compose.foundation.Image(
-        bitmap = bitmap.asImageBitmap(),
-        contentDescription = "Рисунок из конспекта",
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-    )
-}

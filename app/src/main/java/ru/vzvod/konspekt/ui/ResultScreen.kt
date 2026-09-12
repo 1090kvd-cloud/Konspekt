@@ -52,7 +52,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import ru.vzvod.konspekt.data.Materials
 import ru.vzvod.konspekt.data.Sources
-import ru.vzvod.konspekt.logic.DocxImages
 import ru.vzvod.konspekt.logic.DocxWriter
 import ru.vzvod.konspekt.logic.Renderer
 import ru.vzvod.konspekt.model.LessonPlan
@@ -79,10 +78,7 @@ fun ResultScreen(
         if (plan.control.isNotEmpty()) add("Вопросы")
     }
 
-    // В буфер и в сообщение метки рисунков не уходят: там их всё равно не показать.
-    val currentText: () -> String = {
-        DocxImages.stripMarkers(rawText(plan, settings, tabs.getOrNull(tab)))
-    }
+    val currentText: () -> String = { rawText(plan, settings, tabs.getOrNull(tab)) }
 
 
 
@@ -95,7 +91,7 @@ fun ResultScreen(
         if (uri != null) {
             runCatching {
                 context.contentResolver.openOutputStream(uri)?.use {
-                    DocxWriter.write(it, plan, settings, context)
+                    DocxWriter.write(it, plan, settings)
                 }
             }
         }
@@ -152,28 +148,35 @@ fun ResultScreen(
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
+                    val fromFile = plan.input.sourceName.isNotBlank()
+
                     ActionButton(Icons.Filled.ContentCopy, "Копировать") {
                         Export.copy(context, "Конспект", currentText())
                     }
-                    ActionButton(Icons.Filled.Share, "Отправить") {
-                        Export.share(context, Renderer.fileName(plan), currentText())
-                    }
-                    ActionButton(Icons.Filled.Description, "Word") {
-                        saveLauncher.launch(Renderer.fileName(plan) + ".docx")
-                    }
-                    if (plan.input.sourceName.isNotBlank()) {
+                    if (fromFile) {
+                        // Загруженный конспект отдаём оригиналом: пересборка исказит
+                        // вёрстку, таблицы и рисунки, а печатать нужно то, что было.
+                        ActionButton(Icons.Filled.Share, "Отправить") {
+                            Sources.send(context, plan.input.sourceName, plan.input.topic)
+                        }
                         ActionButton(Icons.Filled.Attachment, "Оригинал") {
                             Sources.open(context, plan.input.sourceName)
                         }
-                    }
-                    ActionButton(Icons.Filled.Print, "PDF") {
-                        Renderer.imageDir = DocxImages.dir(context)
-                        Export.printPdf(
-                            context,
-                            Renderer.fileName(plan),
-                            Renderer.html(plan, settings),
-                            settings.landscape
-                        )
+                    } else {
+                        ActionButton(Icons.Filled.Share, "Отправить") {
+                            Export.share(context, Renderer.fileName(plan), currentText())
+                        }
+                        ActionButton(Icons.Filled.Description, "Word") {
+                            saveLauncher.launch(Renderer.fileName(plan) + ".docx")
+                        }
+                        ActionButton(Icons.Filled.Print, "PDF") {
+                            Export.printPdf(
+                                context,
+                                Renderer.fileName(plan),
+                                Renderer.html(plan, settings),
+                                settings.landscape
+                            )
+                        }
                     }
                 }
             }
@@ -184,8 +187,8 @@ fun ResultScreen(
 
             if (plan.input.sourceName.isNotBlank()) {
                 Text(
-                    "Конспект загружен из файла. Текст ниже разобран для правки и поиска; " +
-                        "чтобы напечатать документ со всеми схемами и рисунками, откройте оригинал.",
+                    "Конспект загружен из файла и печатается оригиналом — со всей вёрсткой, " +
+                        "таблицами и рисунками. Текст ниже разобран только для поиска и справки.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                     modifier = Modifier

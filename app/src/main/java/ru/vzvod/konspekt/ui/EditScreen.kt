@@ -243,16 +243,10 @@ private fun MaterialsPickDialog(
         text = {
             val result = outcome
             when {
-                result == null -> Column {
-                    Text("Читаю материалы…", style = MaterialTheme.typography.bodyMedium)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "Скан или снимок распознаётся: страница занимает несколько секунд. " +
-                            "Второй раз по тому же файлу будет быстро.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                result == null -> Text(
+                    "Читаю материалы…",
+                    style = MaterialTheme.typography.bodyMedium
+                )
 
                 result.fragments.isEmpty() -> Column {
                     Text(
@@ -273,7 +267,8 @@ private fun MaterialsPickDialog(
 
                 else -> Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                     Text(
-                        "Найдено по словам из учебного вопроса. Проверьте текст перед вставкой.",
+                        "Найдено по словам из учебного вопроса. Ищется только в текстовых " +
+                            "методичках: .docx, .txt, .rtf. Проверьте текст перед вставкой.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

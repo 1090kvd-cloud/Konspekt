@@ -47,7 +47,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ru.vzvod.konspekt.data.LessonsJson
 import ru.vzvod.konspekt.data.Library
-import ru.vzvod.konspekt.data.Materials
+import ru.vzvod.konspekt.data.FileVault
 import ru.vzvod.konspekt.data.Sources
 import ru.vzvod.konspekt.logic.LessonImport
 import ru.vzvod.konspekt.logic.TextExtract
@@ -81,7 +81,7 @@ fun ArchiveScreen(
                     val lessons = ArrayList<LessonInput>()
                     val notes = ArrayList<String>()
                     uris.forEach { uri ->
-                        val name = Materials.nameOf(context, uri)
+                        val name = FileVault.displayName(context, uri)
                         val raw = runCatching {
                             context.contentResolver.openInputStream(uri)?.use {
                                 TextExtract.readAsText(it.readBytes())
