@@ -39,6 +39,9 @@ class FormState(settings: Settings) {
     /** Ручные правки текста переносятся при пересборке занятия, иначе они бы пропали. */
     private var edits: Map<String, String> = emptyMap()
 
+    /** Имя исходного файла: при пересборке связь с оригиналом не должна теряться. */
+    private var sourceName: String = ""
+
     fun effectiveQuestionCount(): Int {
         val filled = customQuestions.count { it.isNotBlank() }
         return if (filled > 0) filled else questionCount
@@ -64,7 +67,8 @@ class FormState(settings: Settings) {
         includeControl = includeControl,
         includeSafety = includeSafety,
         note = note.trim(),
-        edits = this.edits
+        edits = this.edits,
+        sourceName = this.sourceName
     )
 
     fun loadFrom(i: LessonInput) {
@@ -86,6 +90,7 @@ class FormState(settings: Settings) {
         includeControl = i.includeControl
         includeSafety = i.includeSafety
         edits = i.edits
+        sourceName = i.sourceName
         customQuestions.clear()
         customQuestions.addAll(i.customQuestions)
     }
@@ -108,6 +113,7 @@ class FormState(settings: Settings) {
         includeControl = true
         includeSafety = true
         edits = emptyMap()
+        sourceName = ""
         customQuestions.clear()
     }
 }

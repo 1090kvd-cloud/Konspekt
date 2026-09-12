@@ -154,11 +154,8 @@ fun ResultScreen(
                         Export.copy(context, "Конспект", currentText())
                     }
                     if (fromFile) {
-                        // Загруженный конспект отдаём оригиналом: пересборка исказит
-                        // вёрстку, таблицы и рисунки, а печатать нужно то, что было.
-                        ActionButton(Icons.Filled.Share, "Отправить") {
-                            Sources.send(context, plan.input.sourceName, plan.input.topic)
-                        }
+                        // Оригинал — когда нужна точная вёрстка исходника,
+                        // Word и PDF — когда нужен документ в форме приложения.
                         ActionButton(Icons.Filled.Attachment, "Оригинал") {
                             Sources.open(context, plan.input.sourceName)
                         }
@@ -166,17 +163,17 @@ fun ResultScreen(
                         ActionButton(Icons.Filled.Share, "Отправить") {
                             Export.share(context, Renderer.fileName(plan), currentText())
                         }
-                        ActionButton(Icons.Filled.Description, "Word") {
-                            saveLauncher.launch(Renderer.fileName(plan) + ".docx")
-                        }
-                        ActionButton(Icons.Filled.Print, "PDF") {
-                            Export.printPdf(
-                                context,
-                                Renderer.fileName(plan),
-                                Renderer.html(plan, settings),
-                                settings.landscape
-                            )
-                        }
+                    }
+                    ActionButton(Icons.Filled.Description, "Word") {
+                        saveLauncher.launch(Renderer.fileName(plan) + ".docx")
+                    }
+                    ActionButton(Icons.Filled.Print, "PDF") {
+                        Export.printPdf(
+                            context,
+                            Renderer.fileName(plan),
+                            Renderer.html(plan, settings),
+                            settings.landscape
+                        )
                     }
                 }
             }
@@ -187,8 +184,9 @@ fun ResultScreen(
 
             if (plan.input.sourceName.isNotBlank()) {
                 Text(
-                    "Конспект загружен из файла и печатается оригиналом — со всей вёрсткой, " +
-                        "таблицами и рисунками. Текст ниже разобран только для поиска и справки.",
+                    "Конспект загружен из файла. Текст перенесён из него дословно — " +
+                        "Word и PDF соберут его в форме приложения. Кнопка «Оригинал» " +
+                        "открывает исходный файл с его вёрсткой, таблицами и рисунками.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                     modifier = Modifier
