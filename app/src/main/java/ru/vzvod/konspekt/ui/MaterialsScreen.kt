@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MoreVert
@@ -93,22 +94,20 @@ fun MaterialsScreen(modifier: Modifier = Modifier) {
                 "Куда приложить",
                 "Материал появится на занятиях по выбранному предмету"
             ) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    FilterChip(
-                        selected = pendingDiscipline == null,
-                        onClick = { pendingDiscipline = null },
-                        label = { Text("Общие") }
-                    )
-                    Library.all.forEach { d ->
-                        FilterChip(
-                            selected = pendingDiscipline == d.id,
-                            onClick = { pendingDiscipline = d.id },
-                            label = { Text(d.short) }
-                        )
-                    }
+                ChoiceTile(
+                    icon = Icons.Filled.Apps,
+                    label = "Общие — для всех предметов",
+                    selected = pendingDiscipline == null,
+                    modifier = Modifier.fillMaxWidth()
+                ) { pendingDiscipline = null }
+                Spacer(Modifier.height(10.dp))
+                TileGrid(Library.all) { d, m ->
+                    ChoiceTile(
+                        icon = disciplineIcon(d.id),
+                        label = d.short,
+                        selected = pendingDiscipline == d.id,
+                        modifier = m
+                    ) { pendingDiscipline = d.id }
                 }
                 if (error.isNotBlank()) {
                     Spacer(Modifier.height(6.dp))

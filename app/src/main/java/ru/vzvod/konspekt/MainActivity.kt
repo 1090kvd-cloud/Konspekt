@@ -31,8 +31,6 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,6 +44,10 @@ import ru.vzvod.konspekt.data.Materials
 import ru.vzvod.konspekt.data.Store
 import ru.vzvod.konspekt.logic.Generator
 import ru.vzvod.konspekt.model.LessonInput
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.unit.dp
+import ru.vzvod.konspekt.ui.AppHeader
 import ru.vzvod.konspekt.ui.ArchiveScreen
 import ru.vzvod.konspekt.ui.CreateScreen
 import ru.vzvod.konspekt.ui.EditScreen
@@ -85,6 +87,7 @@ fun AppRoot() {
     var current by remember { mutableStateOf<LessonInput?>(null) }
     var editing by remember { mutableStateOf(false) }
     var series by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
 
     // Черновик пишется при каждом переходе между вкладками: набранное не пропадёт.
     LaunchedEffect(tab) {
@@ -150,25 +153,32 @@ fun AppRoot() {
                 return@Surface
             }
 
+            if (menuOpen) {
+                MainMenu(
+                    current = tab,
+                    onPick = { menuOpen = false; tab = it },
+                    onNew = {
+                        menuOpen = false
+                        form.reset(store.settings)
+                        tab = Tab.Create
+                    },
+                    onSeries = { menuOpen = false; series = true },
+                    onDismiss = { menuOpen = false }
+                )
+            }
+
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
                 topBar = {
-                    TopAppBar(
-                        title = {
-                            Column {
-                                Text(tab.title, style = MaterialTheme.typography.headlineSmall)
-                                if (tab == Tab.Create) {
-                                    Text(
-                                        "Тема и время — остальное подставится",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
+                    AppHeader(
+                        title = tab.label,
+                        subtitle = when (tab) {
+                            Tab.Create -> "предметов: ${Library.all.size}"
+                            Tab.Archive -> "конспектов: ${store.archive.size}"
+                            Tab.Materials -> "материалов: ${Materials.all.size}"
+                            Tab.Settings -> "версия 1.0"
                         },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.background
-                        )
+                        onMenu = { menuOpen = true }
                     )
                 },
                 bottomBar = {
@@ -239,4 +249,55 @@ fun AppRoot() {
             }
         }
     }
+}
+
+/** Меню из шапки: разделы и то, что раньше приходилось искать внутри экранов. */
+@Composable
+private fun MainMenu(
+    current: Tab,
+    onPick: (Tab) -> Unit,
+    onNew: () -> Unit,
+    onSeries: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("План-конспект") },
+        text = {
+            Column {
+                Tab.entries.forEach { t ->
+                    Text(
+                        t.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (t == current) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(t) }
+                            .padding(vertical = 12.dp)
+                    )
+                }
+                ru.vzvod.konspekt.ui.ThinRule(Modifier.padding(vertical = 6.dp))
+                Text(
+                    "Новое занятие",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNew() }
+                        .padding(vertical = 12.dp)
+                )
+                Text(
+                    "Серия занятий по теме",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSeries() }
+                        .padding(vertical = 12.dp)
+                )
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Закрыть") }
+        }
+    )
 }

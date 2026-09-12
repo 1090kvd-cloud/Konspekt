@@ -213,3 +213,119 @@ fun KeyValue(key: String, value: String) {
     }
 }
 
+
+/** Шапка экрана: кнопка меню слева, заголовок по центру и счётчик под ним. */
+@Composable
+fun AppHeader(
+    title: String,
+    subtitle: String,
+    onMenu: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .size(52.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                .clickable(onClick = onMenu),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                androidx.compose.material.icons.Icons.Filled.Menu,
+                "Меню",
+                modifier = Modifier.size(26.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Column(
+            Modifier.weight(1f),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.headlineLarge,
+                maxLines = 1
+            )
+            if (subtitle.isNotBlank()) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        // Уравновешивает кнопку слева, чтобы заголовок стоял по центру экрана.
+        Spacer(Modifier.size(52.dp))
+    }
+}
+
+/**
+ * Плитка выбора: значок и подпись под ним. Крупная цель для пальца,
+ * выбранная выделяется заливкой.
+ */
+@Composable
+fun ChoiceTile(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val border = if (selected) MaterialTheme.colorScheme.primary
+    else MaterialTheme.colorScheme.outlineVariant
+    val fill = if (selected) MaterialTheme.colorScheme.primaryContainer
+    else MaterialTheme.colorScheme.surface
+
+    Column(
+        modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(fill)
+            .border(if (selected) 2.dp else 1.dp, border, RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp, horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            icon,
+            null,
+            modifier = Modifier.size(40.dp),
+            tint = if (selected) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.titleSmall,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            maxLines = 2,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+/** Сетка плиток по две в ряд. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun <T> TileGrid(
+    items: List<T>,
+    modifier: Modifier = Modifier,
+    tile: @Composable (T, Modifier) -> Unit
+) {
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        maxItemsInEachRow = 2
+    ) {
+        items.forEach { item ->
+            tile(item, Modifier.weight(1f))
+        }
+        // Нечётное количество: последняя плитка не должна растягиваться на всю ширину.
+        if (items.size % 2 == 1) Spacer(Modifier.weight(1f))
+    }
+}

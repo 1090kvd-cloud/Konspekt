@@ -91,17 +91,13 @@ fun CreateScreen(
         }
 
         Section("Предмет обучения") {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Library.all.forEach { d ->
-                    FilterChip(
-                        selected = d.id == form.disciplineId,
-                        onClick = { form.disciplineId = d.id },
-                        label = { Text(d.short) }
-                    )
-                }
+            TileGrid(Library.all) { d, m ->
+                ChoiceTile(
+                    icon = disciplineIcon(d.id),
+                    label = d.short,
+                    selected = d.id == form.disciplineId,
+                    modifier = m
+                ) { form.disciplineId = d.id }
             }
         }
 
