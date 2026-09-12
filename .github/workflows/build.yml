@@ -49,7 +49,8 @@ jobs:
             app/src/main/assets/tessdata/rus.traineddata
           do
             if [ -e "$f" ]; then
-              echo "::error file=$f::Этот файл удалён из проекта — удалите его в репозитории"
+              echo "::error::Лишний файл: $f — удалите его в репозитории"
+              echo "  УДАЛИТЬ: $f" >> $GITHUB_STEP_SUMMARY
               fail=1
             fi
           done
@@ -58,7 +59,12 @@ jobs:
             echo "::error::В исходниках остались ссылки на удалённые классы"
             fail=1
           fi
-          [ "$fail" = "0" ] || exit 1
+          if [ "$fail" != "0" ]; then
+            echo "### Сборка остановлена: в репозитории лишние файлы" >> $GITHUB_STEP_SUMMARY
+            echo "Веб-интерфейс GitHub не удаляет файлы при загрузке новой версии." >> $GITHUB_STEP_SUMMARY
+            echo "Откройте каждый файл из списка выше и удалите его кнопкой с корзиной." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
           echo "Лишних файлов нет"
 
       - name: Сборка
