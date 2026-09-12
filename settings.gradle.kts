@@ -16,6 +16,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Отсюда берётся библиотека распознавания текста: в Maven Central её нет.
+        maven { url = uri("https://jitpack.io") }
     }
 }
 
