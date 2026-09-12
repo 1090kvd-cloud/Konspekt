@@ -12,7 +12,7 @@ import ru.vzvod.konspekt.model.Settings
 import java.io.File
 
 /** Всё хранится локально в одном JSON-файле. Никакой сети приложение не использует. */
-class Store(context: Context) {
+class Store(private val context: Context) {
 
     private val file = File(context.filesDir, "konspekt.json")
 
@@ -59,17 +59,31 @@ class Store(context: Context) {
     }
 
     fun delete(id: String) {
+        // Вместе с занятием убираем и его исходный файл, чтобы не копился мусор.
+        archive.firstOrNull { it.id == id }?.sourceName?.let { Sources.remove(context, it) }
         archive.removeAll { it.id == id }
         persist()
+        cleanupImages()
     }
 
     fun clearArchive() {
+        archive.forEach { Sources.remove(context, it.sourceName) }
         archive.clear()
+        cleanupImages()
         persist()
     }
 
     /** Перечитать всё с диска — после восстановления из резервной копии. */
     fun reload() = load()
+
+    /** Рисунки, на которые не ссылается ни одно занятие, больше не нужны. */
+    private fun cleanupImages() {
+        val used = HashSet<String>()
+        (archive + listOfNotNull(draft)).forEach { item ->
+            used += ru.vzvod.konspekt.logic.DocxImages.namesIn(item.edits.values)
+        }
+        ru.vzvod.konspekt.logic.DocxImages.cleanup(context, used)
+    }
 
     private fun load() {
         runCatching {

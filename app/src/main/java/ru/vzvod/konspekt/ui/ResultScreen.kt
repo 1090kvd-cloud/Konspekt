@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Attachment
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
@@ -50,6 +51,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import ru.vzvod.konspekt.data.Materials
+import ru.vzvod.konspekt.data.Sources
+import ru.vzvod.konspekt.logic.DocxImages
 import ru.vzvod.konspekt.logic.DocxWriter
 import ru.vzvod.konspekt.logic.Renderer
 import ru.vzvod.konspekt.model.LessonPlan
@@ -76,13 +79,12 @@ fun ResultScreen(
         if (plan.control.isNotEmpty()) add("Вопросы")
     }
 
+    // В буфер и в сообщение метки рисунков не уходят: там их всё равно не показать.
     val currentText: () -> String = {
-        when (tabs.getOrNull(tab)) {
-            "Раздатка" -> Renderer.handoutText(plan, settings)
-            "Вопросы" -> Renderer.controlText(plan)
-            else -> Renderer.planText(plan, settings)
-        }
+        DocxImages.stripMarkers(rawText(plan, settings, tabs.getOrNull(tab)))
     }
+
+
 
     // Настоящий .docx: открывается и Word, и мобильными офисами, разметка не лезет наружу.
     val saveLauncher = rememberLauncherForActivityResult(
@@ -93,7 +95,7 @@ fun ResultScreen(
         if (uri != null) {
             runCatching {
                 context.contentResolver.openOutputStream(uri)?.use {
-                    DocxWriter.write(it, plan, settings)
+                    DocxWriter.write(it, plan, settings, context)
                 }
             }
         }
@@ -159,7 +161,13 @@ fun ResultScreen(
                     ActionButton(Icons.Filled.Description, "Word") {
                         saveLauncher.launch(Renderer.fileName(plan) + ".docx")
                     }
+                    if (plan.input.sourceName.isNotBlank()) {
+                        ActionButton(Icons.Filled.Attachment, "Оригинал") {
+                            Sources.open(context, plan.input.sourceName)
+                        }
+                    }
                     ActionButton(Icons.Filled.Print, "PDF") {
+                        Renderer.imageDir = DocxImages.dir(context)
                         Export.printPdf(
                             context,
                             Renderer.fileName(plan),
@@ -173,6 +181,19 @@ fun ResultScreen(
         containerColor = MaterialTheme.colorScheme.background
     ) { inner ->
         Column(Modifier.padding(inner).fillMaxSize()) {
+
+            if (plan.input.sourceName.isNotBlank()) {
+                Text(
+                    "Конспект загружен из файла. Текст ниже разобран для правки и поиска; " +
+                        "чтобы напечатать документ со всеми схемами и рисунками, откройте оригинал.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                        .padding(horizontal = 18.dp, vertical = 8.dp)
+                )
+            }
 
             val gaps = missingFields(plan, settings)
             if (gaps.isNotEmpty()) {
@@ -501,4 +522,10 @@ private fun missingFields(plan: LessonPlan, settings: Settings): List<String> {
     if (i.lessonTitle.isBlank()) out.add("наименование занятия")
     if (plan.place.isBlank()) out.add("место")
     return out
+}
+
+private fun rawText(plan: LessonPlan, settings: Settings, tab: String?): String = when (tab) {
+    "Раздатка" -> Renderer.handoutText(plan, settings)
+    "Вопросы" -> Renderer.controlText(plan)
+    else -> Renderer.planText(plan, settings)
 }

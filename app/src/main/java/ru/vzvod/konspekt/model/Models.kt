@@ -49,6 +49,8 @@ data class LessonInput(
     val includeControl: Boolean = true,
     val includeSafety: Boolean = true,
     val note: String = "",
+    /** Имя исходного файла, если конспект загружен готовым. Печатается без изменений. */
+    val sourceName: String = "",
     /**
      * Ручные правки готового документа: ключ раздела -> текст, строка на пункт.
      * Пустая карта — документ целиком собран из шаблонов.

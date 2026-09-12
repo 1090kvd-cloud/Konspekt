@@ -30,6 +30,10 @@ object Generator {
         const val INTRO_TRAINEE = "intro.trainee"
         const val OUTRO_CONTENT = "outro.content"
         const val OUTRO_TRAINEE = "outro.trainee"
+        // Время частей: обычно считается само, но у загруженного конспекта оно своё.
+        const val INTRO_MIN = "intro.minutes"
+        const val OUTRO_MIN = "outro.minutes"
+        fun qMinutes(n: Int) = "q$n.minutes"
         fun qTitle(n: Int) = "q$n.title"
         fun qContent(n: Int) = "q$n.content"
         fun qTrainee(n: Int) = "q$n.trainee"
@@ -66,24 +70,30 @@ object Generator {
         fun one(key: String, fallback: String): String =
             edits[key]?.trim()?.ifBlank { null } ?: fallback
 
+        fun minutes(key: String, fallback: Int): Int =
+            edits[key]?.trim()?.toIntOrNull()?.takeIf { it in 1..600 } ?: fallback
+
+        val introMin = minutes(Keys.INTRO_MIN, edge)
+        val outroMin = minutes(Keys.OUTRO_MIN, edge)
+
         val questions = titles.mapIndexed { i, title ->
             val n = i + 1
             QuestionBlock(
                 index = n,
                 title = one(Keys.qTitle(n), title),
-                minutes = slices[i],
+                minutes = minutes(Keys.qMinutes(n), slices[i]),
                 content = list(Keys.qContent(n), questionContent(i, titles.size, d, method)),
                 trainee = list(Keys.qTrainee(n), traineeActions(i, titles.size))
             )
         }
 
-        val intro = introStage(edge, input, topic).let {
+        val intro = introStage(introMin, input, topic).let {
             it.copy(
                 content = list(Keys.INTRO_CONTENT, it.content),
                 trainee = list(Keys.INTRO_TRAINEE, it.trainee)
             )
         }
-        val outro = outroStage(edge).let {
+        val outro = outroStage(outroMin).let {
             it.copy(
                 content = list(Keys.OUTRO_CONTENT, it.content),
                 trainee = list(Keys.OUTRO_TRAINEE, it.trainee)

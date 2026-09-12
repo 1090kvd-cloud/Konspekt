@@ -32,29 +32,30 @@ object TextExtract {
         val source = File(File(context.filesDir, "materials"), m.storedName)
         if (!source.exists()) return Result.Unsupported("Файл не найден")
 
-        val result = fromFile(source, m.storedName)
+        val result = fromFile(source, m.storedName, context)
         if (result is Result.Ok) {
             runCatching { cache.writeText(result.text) }
         }
         return result
     }
 
-    /** Разбор произвольного файла — используется и при загрузке старых конспектов. */
-    fun fromFile(source: File, fileName: String): Result {
+    /**
+     * Разбор произвольного файла.
+     * @param context нужен для распознавания сканов и снимков; без него они пропускаются.
+     */
+    fun fromFile(source: File, fileName: String, context: Context? = null): Result {
         val ext = fileName.substringAfterLast('.', "").lowercase()
         val result = runCatching {
             when (ext) {
                 "txt", "md", "csv", "log" -> Result.Ok(readAsText(source.readBytes()))
                 "html", "htm", "xhtml" -> Result.Ok(stripTags(readAsText(source.readBytes())))
                 "doc" -> readDoc(source)
-                "docx" -> readDocx(source)
+                "docx" -> readDocx(source, context)
                 "rtf" -> Result.Ok(readRtf(readAsText(source.readBytes())))
-                "pdf" -> Result.Unsupported(
-                    "PDF приложение не разбирает. Сохраните методичку в .docx или .txt"
-                )
-                "jpg", "jpeg", "png", "webp", "gif", "bmp" -> Result.Unsupported(
-                    "Это изображение — текста в нём нет"
-                )
+                "pdf" -> recognized(context) { Ocr.fromPdf(it, source) }
+                    ?: Result.Unsupported("PDF не распознался. Сохраните методичку в .docx")
+                "jpg", "jpeg", "png", "webp", "bmp" -> recognized(context) { Ocr.fromImage(it, source) }
+                    ?: Result.Unsupported("Текст на снимке не распознался")
                 else -> Result.Unsupported("Формат .$ext не разбирается")
             }
         }.getOrElse { Result.Unsupported("Файл не читается") }
@@ -74,10 +75,17 @@ object TextExtract {
             val input = context.contentResolver.openInputStream(uri)
                 ?: return Result.Unsupported("Файл недоступен для чтения")
             input.use { i -> tmp.outputStream().use { o -> i.copyTo(o) } }
-            return fromFile(tmp, fileName)
+            return fromFile(tmp, fileName, context)
         } finally {
             tmp.delete()
         }
+    }
+
+    /** Распознавание идёт долго, поэтому результат сразу уходит в кеш выше по стеку. */
+    private fun recognized(context: Context?, run: (Context) -> String?): Result? {
+        if (context == null) return null
+        val text = run(context) ?: return null
+        return if (text.isBlank()) null else Result.Ok(text)
     }
 
     fun forget(context: Context, id: String) {
@@ -101,18 +109,23 @@ object TextExtract {
     }
 
     /** .docx — это zip, текст лежит в word/document.xml. */
-    private fun readDocx(file: File): Result {
-        ZipFile(file).use { zip ->
-            val entry = zip.getEntry("word/document.xml")
-                ?: return Result.Unsupported("Внутри .docx нет текстовой части")
-            val xml = zip.getInputStream(entry).use { it.readBytes().toString(StandardCharsets.UTF_8) }
-            val withBreaks = xml
-                .replace(Regex("<w:tab[^>]*/>"), " ")
-                .replace(Regex("<w:br[^>]*/>"), "\n")
-                .replace(Regex("</w:p>"), "\n")
-            return Result.Ok(stripTags(withBreaks))
-        }
+    private fun readDocx(file: File, context: Context?): Result {
+        // Если есть куда сохранить рисунки, берём разметку с метками вместо картинок.
+        val xml = (context?.let { DocxImages.extract(it, file) }) ?: plainDocx(file)
+            ?: return Result.Unsupported("Внутри .docx нет текстовой части")
+        val withBreaks = xml
+            .replace(Regex("<w:tab[^>]*/>"), " ")
+            .replace(Regex("<w:br[^>]*/>"), "\n")
+            .replace(Regex("</w:p>"), "\n")
+        return Result.Ok(stripTags(withBreaks))
     }
+
+    private fun plainDocx(file: File): String? = runCatching {
+        ZipFile(file).use { zip ->
+            val entry = zip.getEntry("word/document.xml") ?: return@use null
+            zip.getInputStream(entry).use { it.readBytes().toString(StandardCharsets.UTF_8) }
+        }
+    }.getOrNull()
 
     private fun readRtf(raw: String): String {
         val sb = StringBuilder()

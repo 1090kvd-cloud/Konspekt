@@ -140,8 +140,29 @@ object Renderer {
     private fun esc(s: String) = s
         .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+    /** Каталог рисунков задаётся перед печатью: без него метки станут словом «рисунок». */
+    var imageDir: java.io.File? = null
+
+    private fun img(name: String): String {
+        val dir = imageDir ?: return "<li>[рисунок]</li>"
+        val f = java.io.File(dir, name)
+        if (!f.exists()) return "<li>[рисунок]</li>"
+        return runCatching {
+            val bytes = f.readBytes()
+            if (bytes.size > 4_000_000) return "<li>[рисунок]</li>"
+            val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            val ext = name.substringAfterLast('.', "png").lowercase()
+            val mime = if (ext == "jpg" || ext == "jpeg") "image/jpeg" else "image/$ext"
+            "<li style=\"list-style:none;margin-left:-16px\">" +
+                "<img src=\"data:$mime;base64,$b64\" style=\"max-width:98%;height:auto\"></li>"
+        }.getOrElse { "<li>[рисунок]</li>" }
+    }
+
     private fun ul(items: List<String>) =
-        if (items.isEmpty()) "" else items.joinToString("", "<ul>", "</ul>") { "<li>${esc(it)}</li>" }
+        if (items.isEmpty()) "" else items.joinToString("", "<ul>", "</ul>") { item ->
+            val name = DocxImages.nameIn(item)
+            if (name != null) img(name) else "<li>${esc(item)}</li>"
+        }
 
     fun html(plan: LessonPlan, s: Settings): String {
         val i = plan.input

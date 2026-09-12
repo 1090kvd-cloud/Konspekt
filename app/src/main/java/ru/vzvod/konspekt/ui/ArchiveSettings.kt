@@ -48,6 +48,7 @@ import kotlinx.coroutines.withContext
 import ru.vzvod.konspekt.data.LessonsJson
 import ru.vzvod.konspekt.data.Library
 import ru.vzvod.konspekt.data.Materials
+import ru.vzvod.konspekt.data.Sources
 import ru.vzvod.konspekt.logic.LessonImport
 import ru.vzvod.konspekt.logic.TextExtract
 import ru.vzvod.konspekt.model.LessonInput
@@ -103,7 +104,15 @@ fun ArchiveScreen(
                             is TextExtract.Result.Unsupported -> notes.add("$name — ${t.reason}")
                             is TextExtract.Result.Ok -> {
                                 val out = LessonImport.parse(t.text, name)
-                                out.lesson?.let { lessons.add(it) }
+                                out.lesson?.let { lesson ->
+                                    // Исходник храним рядом: его можно распечатать
+                                    // как есть, со всеми схемами и рисунками.
+                                    val stored = Sources.save(context, uri, name)
+                                    lessons.add(
+                                        if (stored != null) lesson.copy(sourceName = stored)
+                                        else lesson
+                                    )
+                                }
                                 notes.add(out.note)
                             }
                         }
@@ -245,7 +254,8 @@ fun ArchiveScreen(
                         Spacer(Modifier.height(3.dp))
                         Text(
                             "Занятие ${item.lessonNo} · ${Library.byId(item.disciplineId).short} · " +
-                                "${item.minutes} мин · ${fmt.format(Date(item.createdAt))}",
+                                "${item.minutes} мин · ${fmt.format(Date(item.createdAt))}" +
+                                if (item.sourceName.isNotBlank()) " · есть оригинал" else "",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -254,6 +264,8 @@ fun ArchiveScreen(
                         onOpen = { onOpen(item) },
                         onEditConditions = { onEditConditions(item) },
                         onDuplicate = { onDuplicate(item) },
+                        hasSource = item.sourceName.isNotBlank(),
+                        onSource = { Sources.open(context, item.sourceName) },
                         onDelete = { onDelete(item) }
                     )
                 }
@@ -469,6 +481,8 @@ private fun ArchiveMenu(
     onOpen: () -> Unit,
     onEditConditions: () -> Unit,
     onDuplicate: () -> Unit,
+    hasSource: Boolean,
+    onSource: () -> Unit,
     onDelete: () -> Unit
 ) {
     var open by remember { mutableStateOf(false) }
@@ -486,6 +500,12 @@ private fun ArchiveMenu(
                 text = { Text("Сделать копию") },
                 onClick = { open = false; onDuplicate() }
             )
+            if (hasSource) {
+                DropdownMenuItem(
+                    text = { Text("Открыть оригинал") },
+                    onClick = { open = false; onSource() }
+                )
+            }
             DropdownMenuItem(text = { Text("Удалить") }, onClick = { open = false; onDelete() })
         }
     }

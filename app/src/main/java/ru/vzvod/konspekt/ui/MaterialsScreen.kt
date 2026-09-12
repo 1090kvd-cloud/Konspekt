@@ -131,6 +131,7 @@ fun MaterialsScreen(modifier: Modifier = Modifier) {
                     Spacer(Modifier.height(8.dp))
                     Text(
                         "Приложите методичку, выписку из устава, таблицу нормативов или фото плаката. " +
+                            "Текст со сканов, PDF и снимков приложение распознаёт само. " +
                             "Файл скопируется в приложение и будет открываться без интернета — даже если исходный удалить.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

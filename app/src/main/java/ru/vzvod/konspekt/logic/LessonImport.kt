@@ -5,48 +5,69 @@ import ru.vzvod.konspekt.model.LessonInput
 import java.util.UUID
 
 /**
- * Разбор уже написанного плана-конспекта в файле.
+ * Разбор уже написанного плана-конспекта из файла.
  *
- * Ориентируемся на метки стандартной формы: ТЕМА, ЗАНЯТИЕ, ЦЕЛИ, Время, Место,
- * Материальное обеспечение, части хода занятия. Чего в файле нет — остаётся пустым,
- * ничего не додумывается. Всё найденное ложится в правки, чтобы текст сохранился дословно.
+ * Главное правило: ничего не терять. Весь текст хода занятия ложится в правки
+ * дословно, вместе со временем частей, поэтому при сборке документ выглядит так же,
+ * как в исходном файле. Шаблоны подставляются только туда, где в файле пусто.
  */
 object LessonImport {
 
     data class Outcome(val lesson: LessonInput?, val note: String)
 
-    private val partHeads = listOf(
-        "вводная часть", "основная часть", "заключительная часть"
-    )
+    private val introMark = Regex("вводная\\s+часть", RegexOption.IGNORE_CASE)
+    private val mainMark = Regex("основная\\s+часть", RegexOption.IGNORE_CASE)
+    private val outroMark = Regex("заключительная\\s+часть", RegexOption.IGNORE_CASE)
+    private val runMark = Regex("^ход\\s+занятия", RegexOption.IGNORE_CASE)
 
     fun parse(text: String, fileName: String): Outcome {
         val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
         if (lines.isEmpty()) return Outcome(null, "$fileName — пустой файл")
 
         val whole = lines.joinToString("\n")
-        val lower = whole.lowercase()
+        val disciplineId = guessDiscipline(whole.take(1500).lowercase())
 
-        val disciplineId = guessDiscipline(lower)
-        val themeNo = after(lines, Regex("^ТЕМА\\s*№?\\s*([\\dA-Za-zА-Яа-я,\\.]*)\\s*:", RegexOption.IGNORE_CASE), 1)
+        val themeNo = numberAfter(lines, "ТЕМА")
         val topic = afterColon(lines, Regex("^ТЕМА\\b", RegexOption.IGNORE_CASE))
-        val lessonNo = after(lines, Regex("^ЗАНЯТИЕ\\s*№?\\s*([\\dA-Za-zА-Яа-я,\\.]*)\\s*:", RegexOption.IGNORE_CASE), 1)
+        val lessonNo = numberAfter(lines, "ЗАНЯТИЕ")
         val lessonTitle = afterColon(lines, Regex("^ЗАНЯТИЕ\\b", RegexOption.IGNORE_CASE))
 
         val place = afterColon(lines, Regex("^Мест[оа]\\b", RegexOption.IGNORE_CASE))
+        val timeLine = afterColon(lines, Regex("^Врем[яени]+\\b", RegexOption.IGNORE_CASE))
         val provision = afterColon(lines, Regex("^Материальн", RegexOption.IGNORE_CASE))
-        val minutes = parseMinutes(afterColon(lines, Regex("^Врем[яени]+\\b", RegexOption.IGNORE_CASE)))
-
-        val goals = block(lines, Regex("^ЦЕЛ[ИЬ]\\b", RegexOption.IGNORE_CASE))
-        val questions = numbered(lines)
+        val goals = headedBlock(lines, Regex("^ЦЕЛ[ИЬ]\\b", RegexOption.IGNORE_CASE))
+        val safety = headedBlock(lines, Regex("^Требования безопасн", RegexOption.IGNORE_CASE))
 
         val edits = HashMap<String, String>()
         if (goals.isNotEmpty()) edits[Generator.Keys.GOALS] = goals.joinToString("\n")
+        if (safety.isNotEmpty()) edits[Generator.Keys.SAFETY] = safety.joinToString("\n")
         if (provision.isNotBlank()) {
-            edits[Generator.Keys.PROVISION] =
-                provision.split(',', ';').map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
+            edits[Generator.Keys.PROVISION] = provision
+                .split(',', ';')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .joinToString("\n")
         }
-        partBlock(lines, "вводная часть")?.let { edits[Generator.Keys.INTRO_CONTENT] = it }
-        partBlock(lines, "заключительная часть")?.let { edits[Generator.Keys.OUTRO_CONTENT] = it }
+
+        // Ход занятия: вводная, основная с вопросами, заключительная — дословно.
+        val run = runSection(lines)
+        run.intro?.let { edits[Generator.Keys.INTRO_CONTENT] = it.body }
+        run.intro?.minutes?.let { edits[Generator.Keys.INTRO_MIN] = it.toString() }
+        run.outro?.let { edits[Generator.Keys.OUTRO_CONTENT] = it.body }
+        run.outro?.minutes?.let { edits[Generator.Keys.OUTRO_MIN] = it.toString() }
+
+        val questions = ArrayList<String>()
+        run.questions.forEachIndexed { i, q ->
+            val n = i + 1
+            questions.add(q.title)
+            edits[Generator.Keys.qTitle(n)] = q.title
+            if (q.body.isNotBlank()) edits[Generator.Keys.qContent(n)] = q.body
+            q.minutes?.let { edits[Generator.Keys.qMinutes(n)] = it.toString() }
+        }
+
+        val total = parseMinutes(timeLine).takeIf { it > 0 }
+            ?: run.totalMinutes().takeIf { it > 0 }
+            ?: 90
 
         val effectiveTopic = topic.ifBlank { lessonTitle }.ifBlank {
             fileName.substringBeforeLast('.').replace('_', ' ')
@@ -60,7 +81,8 @@ object LessonImport {
             themeNo = themeNo.ifBlank { "1" },
             lessonNo = lessonNo.ifBlank { "1" },
             lessonTitle = lessonTitle,
-            minutes = minutes,
+            minutes = total,
+            timeLabel = timeLine,
             place = place,
             method = "",
             unitName = "",
@@ -69,31 +91,132 @@ object LessonImport {
             questionCount = questions.size.coerceIn(1, 6),
             customQuestions = questions,
             includeHandout = false,
-            includeControl = true,
-            includeSafety = whole.contains("безопасност", true),
+            includeControl = false,
+            includeSafety = safety.isNotEmpty(),
             note = "",
             edits = edits
         )
 
-        val found = buildList {
-            if (topic.isNotBlank() || lessonTitle.isNotBlank()) add("тема")
-            if (questions.isNotEmpty()) add("учебные вопросы: ${questions.size}")
-            if (goals.isNotEmpty()) add("цели")
-            if (place.isNotBlank()) add("место")
-            if (minutes != 90) add("время")
-        }
-        val note = if (found.isEmpty()) {
-            "$fileName — разметка не узнана, загружено как есть"
-        } else {
-            "$fileName — ${found.joinToString(", ")}"
-        }
-        return Outcome(lesson, note)
+        return Outcome(lesson, note(fileName, topic, lessonTitle, questions, goals, run))
     }
 
-    // --- разбор отдельных мест ---
+    private fun note(
+        fileName: String,
+        topic: String,
+        lessonTitle: String,
+        questions: List<String>,
+        goals: List<String>,
+        run: Run
+    ): String {
+        val found = ArrayList<String>()
+        if (topic.isNotBlank() || lessonTitle.isNotBlank()) found.add("тема")
+        if (goals.isNotEmpty()) found.add("цели")
+        if (questions.isNotEmpty()) found.add("вопросов: ${questions.size}")
+        val chars = run.questions.sumOf { it.body.length }
+        if (chars > 0) found.add("содержания: ${chars / 1000} тыс. знаков")
+        return if (found.isEmpty()) "$fileName — разметка не узнана, текст сохранён целиком"
+        else "$fileName — ${found.joinToString(", ")}"
+    }
 
-    private fun guessDiscipline(lowerText: String): String {
-        val head = lowerText.take(1200)
+    // --- ход занятия ---
+
+    private data class Part(val title: String, val body: String, val minutes: Int?)
+
+    private data class Run(
+        val intro: Part?,
+        val questions: List<Part>,
+        val outro: Part?
+    ) {
+        fun totalMinutes(): Int =
+            (intro?.minutes ?: 0) + (outro?.minutes ?: 0) + questions.sumOf { it.minutes ?: 0 }
+    }
+
+    private fun runSection(lines: List<String>): Run {
+        val start = lines.indexOfFirst { runMark.containsMatchIn(it) }
+        val work = if (start >= 0) lines.drop(start + 1) else lines
+
+        val iIntro = work.indexOfFirst { introMark.containsMatchIn(it) }
+        val iMain = work.indexOfFirst { mainMark.containsMatchIn(it) }
+        val iOutro = work.indexOfFirst { outroMark.containsMatchIn(it) }
+        if (iIntro < 0 && iMain < 0) return Run(null, emptyList(), null)
+
+        fun slice(from: Int, to: Int): List<String> {
+            if (from < 0) return emptyList()
+            val end = if (to > from) to else work.size
+            return work.subList(from, end)
+        }
+
+        val introLines = slice(iIntro, if (iMain >= 0) iMain else iOutro)
+        val mainLines = slice(iMain, iOutro)
+        val outroLines = slice(iOutro, -1)
+
+        val intro = introLines.takeIf { it.isNotEmpty() }?.let {
+            Part("Вводная часть", strip(it, introMark).joinToString("\n"), minutesIn(it.take(3)))
+        }
+        val outro = outroLines.takeIf { it.isNotEmpty() }?.let {
+            Part("Заключительная часть", strip(it, outroMark).joinToString("\n"), minutesIn(it.take(3)))
+        }
+        return Run(intro, questions(mainLines), outro)
+    }
+
+    /** Основная часть режется по нумерованным заголовкам вопросов. */
+    private fun questions(mainLines: List<String>): List<Part> {
+        if (mainLines.isEmpty()) return emptyList()
+        val body = strip(mainLines, mainMark)
+        val headRe = Regex("^(\\d{1,2})[\\.\\)]\\s*(.{6,200})$")
+
+        val heads = ArrayList<Pair<Int, String>>()
+        body.forEachIndexed { idx, line ->
+            val m = headRe.find(line) ?: return@forEachIndexed
+            val n = m.groupValues[1].toIntOrNull() ?: return@forEachIndexed
+            if (n == heads.size + 1 && n <= 6) heads.add(idx to m.groupValues[2].trim())
+        }
+
+        // Нумерации нет — весь текст основной части идёт одним вопросом, ничего не теряя.
+        if (heads.isEmpty()) {
+            return listOf(
+                Part(
+                    "Основная часть",
+                    body.joinToString("\n"),
+                    minutesIn(mainLines.take(3))
+                )
+            )
+        }
+
+        return heads.mapIndexed { i, (at, rawTitle) ->
+            val to = if (i + 1 < heads.size) heads[i + 1].first else body.size
+            val chunk = body.subList(at + 1, to)
+            val minutes = minutesIn(listOf(rawTitle))
+            Part(
+                title = rawTitle.replace(Regex("\\s*[—–-]\\s*\\d+\\s*мин\\.?\\s*$"), "").trim(),
+                body = chunk.joinToString("\n"),
+                minutes = minutes
+            )
+        }
+    }
+
+    /** Убирает строку-заголовок части, оставляя всё остальное как есть. */
+    private fun strip(lines: List<String>, head: Regex): List<String> {
+        val out = ArrayList<String>(lines)
+        if (out.isNotEmpty() && head.containsMatchIn(out[0])) {
+            val rest = out[0]
+                .replace(head, "")
+                .replace(Regex("\\d+\\s*мин\\.?"), "")
+                .trim(' ', ':', '.', '—', '-')
+            out.removeAt(0)
+            if (rest.length > 3) out.add(0, rest)
+        }
+        return out.filter { it.isNotEmpty() }
+    }
+
+    private fun minutesIn(lines: List<String>): Int? = lines
+        .firstNotNullOfOrNull { Regex("(\\d{1,3})\\s*мин").find(it)?.groupValues?.get(1) }
+        ?.toIntOrNull()
+        ?.takeIf { it in 1..600 }
+
+    // --- шапка ---
+
+    private fun guessDiscipline(head: String): String {
         Library.all.forEach { d ->
             val marks = listOfNotNull(
                 d.dative.lowercase().ifBlank { null },
@@ -105,10 +228,10 @@ object LessonImport {
         return "general"
     }
 
-    private fun after(lines: List<String>, re: Regex, group: Int): String {
+    private fun numberAfter(lines: List<String>, word: String): String {
+        val re = Regex("^$word\\s*№?\\s*([\\d,\\.\\-]+)\\s*:", RegexOption.IGNORE_CASE)
         lines.forEach { l ->
-            val m = re.find(l)
-            if (m != null) return m.groupValues.getOrElse(group) { "" }.trim().trim(':', '.')
+            re.find(l)?.let { return it.groupValues[1].trim().trim('.', ':') }
         }
         return ""
     }
@@ -123,35 +246,19 @@ object LessonImport {
         return ""
     }
 
-    /** Строки после заголовка до следующего заголовка формы. */
-    private fun block(lines: List<String>, head: Regex): List<String> {
+    /** Строки после заголовка до следующего заголовка формы. Без ограничения длины. */
+    private fun headedBlock(lines: List<String>, head: Regex): List<String> {
         val start = lines.indexOfFirst { head.containsMatchIn(it) }
         if (start < 0) return emptyList()
         val out = ArrayList<String>()
-        val first = lines[start].substringAfter(':', "").trim()
-        if (first.isNotEmpty()) out.add(first)
+        lines[start].substringAfter(':', "").trim().takeIf { it.isNotEmpty() }?.let { out.add(it) }
         var i = start + 1
-        while (i < lines.size && out.size < 12) {
-            val l = lines[i]
-            if (isHead(l)) break
-            out.add(l)
+        while (i < lines.size) {
+            if (isHead(lines[i])) break
+            out.add(lines[i])
             i++
         }
-        return out.map { it.trim() }.filter { it.isNotEmpty() }
-    }
-
-    private fun partBlock(lines: List<String>, name: String): String? {
-        val start = lines.indexOfFirst { it.lowercase().contains(name) }
-        if (start < 0) return null
-        val out = ArrayList<String>()
-        var i = start + 1
-        while (i < lines.size && out.size < 10) {
-            val l = lines[i]
-            if (partHeads.any { l.lowercase().contains(it) }) break
-            if (l.length > 15) out.add(l)
-            i++
-        }
-        return if (out.isEmpty()) null else out.joinToString("\n")
+        return out.filter { it.isNotEmpty() }
     }
 
     private fun isHead(line: String): Boolean {
@@ -159,36 +266,14 @@ object LessonImport {
         return l.startsWith("врем") || l.startsWith("мест") || l.startsWith("материальн") ||
             l.startsWith("ход занятия") || l.startsWith("тема") || l.startsWith("занятие") ||
             l.startsWith("руководств") || l.startsWith("требования безопасн") ||
-            partHeads.any { l.startsWith(it) }
-    }
-
-    /** Учебные вопросы: строки вида «1. Наименование». */
-    private fun numbered(lines: List<String>): List<String> {
-        val re = Regex("^(\\d{1,2})[\\.\\)]\\s+(.{8,})$")
-        val out = LinkedHashMap<Int, String>()
-        lines.forEach { l ->
-            val m = re.find(l) ?: return@forEach
-            val n = m.groupValues[1].toIntOrNull() ?: return@forEach
-            if (n !in 1..6) return@forEach
-            val body = m.groupValues[2]
-                .replace(Regex("\\s*[—-]\\s*\\d+\\s*мин\\.?$"), "")
-                .trim()
-            if (body.length in 8..200 && !out.containsKey(n)) out[n] = body
-        }
-        // Берём только сплошную нумерацию с первого вопроса.
-        val result = ArrayList<String>()
-        var n = 1
-        while (out.containsKey(n) && n <= 6) {
-            result.add(out.getValue(n)); n++
-        }
-        return result
+            introMark.containsMatchIn(l) || mainMark.containsMatchIn(l) || outroMark.containsMatchIn(l)
     }
 
     private fun parseMinutes(value: String): Int {
-        if (value.isBlank()) return 90
+        if (value.isBlank()) return 0
         val hours = Regex("(\\d+)\\s*час").find(value)?.groupValues?.get(1)?.toIntOrNull() ?: 0
         val mins = Regex("(\\d+)\\s*мин").find(value)?.groupValues?.get(1)?.toIntOrNull() ?: 0
         val total = hours * 45 + mins
-        return if (total in 15..480) total else 90
+        return if (total in 15..600) total else 0
     }
 }
