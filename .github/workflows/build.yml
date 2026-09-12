@@ -38,6 +38,29 @@ jobs:
           fi
           chmod +x gradlew
 
+      - name: Проверка целостности
+        run: |
+          # Веб-интерфейс GitHub не удаляет файлы при загрузке новой версии:
+          # оставшийся лишний исходник ломает сборку ссылками в никуда.
+          fail=0
+          for f in \
+            app/src/main/java/ru/vzvod/konspekt/logic/Ocr.kt \
+            app/src/main/java/ru/vzvod/konspekt/logic/DocxImages.kt \
+            app/src/main/assets/tessdata/rus.traineddata
+          do
+            if [ -e "$f" ]; then
+              echo "::error file=$f::Этот файл удалён из проекта — удалите его в репозитории"
+              fail=1
+            fi
+          done
+          # Ссылки на классы, которых больше нет
+          if grep -rqs "TessBaseAPI\|DocxImages" app/src/main/java; then
+            echo "::error::В исходниках остались ссылки на удалённые классы"
+            fail=1
+          fi
+          [ "$fail" = "0" ] || exit 1
+          echo "Лишних файлов нет"
+
       - name: Сборка
         run: ./gradlew assembleDebug assembleRelease --no-daemon --stacktrace
 
@@ -46,6 +69,11 @@ jobs:
           mkdir -p out
           cp app/build/outputs/apk/debug/app-debug.apk out/konspekt-debug.apk
           cp app/build/outputs/apk/release/app-release.apk out/konspekt-release.apk
+          ls -lh out
+          echo "### APK собран" >> $GITHUB_STEP_SUMMARY
+          for f in out/*.apk; do
+            echo "- \`$(basename $f)\` — $(du -h "$f" | cut -f1)" >> $GITHUB_STEP_SUMMARY
+          done
 
       - name: Выложить APK
         uses: actions/upload-artifact@v5
