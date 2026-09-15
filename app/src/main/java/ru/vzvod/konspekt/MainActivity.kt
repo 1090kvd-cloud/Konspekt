@@ -119,8 +119,7 @@ fun AppRoot() {
                 EditScreen(
                     input = openPlan,
                     onCancel = { editing = false },
-                    onSave = { edits ->
-                        val updated = openPlan.copy(edits = edits)
+                    onSave = { updated ->
                         current = updated
                         store.saveDraft(updated)
                         // Если занятие уже в архиве, правки сохраняются вместе с ним.
@@ -155,8 +154,6 @@ fun AppRoot() {
 
             if (menuOpen) {
                 MainMenu(
-                    current = tab,
-                    onPick = { menuOpen = false; tab = it },
                     onNew = {
                         menuOpen = false
                         form.reset(store.settings)
@@ -173,7 +170,9 @@ fun AppRoot() {
                     AppHeader(
                         title = tab.label,
                         subtitle = when (tab) {
-                            Tab.Create -> "предметов: ${Library.all.size}"
+                            // Полезнее счётчика: что за занятие сейчас собирается.
+                            Tab.Create -> Library.byId(form.disciplineId).name.lowercase() +
+                                ", ${form.minutes} мин"
                             Tab.Archive -> "конспектов: ${store.archive.size}"
                             Tab.Materials -> "материалов: ${Materials.all.size}"
                             Tab.Settings -> "версия 1.0"
@@ -214,7 +213,6 @@ fun AppRoot() {
                             store.saveDraft(input)
                             current = input
                         },
-                        onSeries = { series = true },
                         onNew = { form.reset(store.settings) },
                         modifier = m
                     )
@@ -227,6 +225,7 @@ fun AppRoot() {
                             tab = Tab.Create
                         },
                         onDuplicate = { current = store.duplicate(it) },
+                        onToggleConducted = { store.toggleConducted(it.id) },
                         onDelete = { store.delete(it.id) },
                         onImported = { list -> list.reversed().forEach { store.save(it) } },
                         modifier = m
@@ -254,30 +253,15 @@ fun AppRoot() {
 /** Меню из шапки: разделы и то, что раньше приходилось искать внутри экранов. */
 @Composable
 private fun MainMenu(
-    current: Tab,
-    onPick: (Tab) -> Unit,
     onNew: () -> Unit,
     onSeries: () -> Unit,
     onDismiss: () -> Unit
 ) {
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("План-конспект") },
+        title = { Text("Быстрые действия") },
         text = {
             Column {
-                Tab.entries.forEach { t ->
-                    Text(
-                        t.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (t == current) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onPick(t) }
-                            .padding(vertical = 12.dp)
-                    )
-                }
-                ru.vzvod.konspekt.ui.ThinRule(Modifier.padding(vertical = 6.dp))
                 Text(
                     "Новое занятие",
                     style = MaterialTheme.typography.titleMedium,

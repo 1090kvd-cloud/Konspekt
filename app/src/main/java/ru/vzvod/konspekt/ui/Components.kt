@@ -266,8 +266,8 @@ fun AppHeader(
 }
 
 /**
- * Плитка выбора: значок и подпись под ним. Крупная цель для пальца,
- * выбранная выделяется заливкой.
+ * Плитка выбора: значок и подпись. Узкая — рассчитана на ленту с прокруткой вбок,
+ * чтобы выбор предмета не занимал пол-экрана и тема занятия была видна сразу.
  */
 @Composable
 fun ChoiceTile(
@@ -284,49 +284,90 @@ fun ChoiceTile(
 
     Column(
         modifier
-            .clip(RoundedCornerShape(18.dp))
+            .width(96.dp)
+            .clip(RoundedCornerShape(16.dp))
             .background(fill)
-            .border(if (selected) 2.dp else 1.dp, border, RoundedCornerShape(18.dp))
+            .border(if (selected) 2.dp else 1.dp, border, RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 14.dp, horizontal = 8.dp),
+            .padding(vertical = 10.dp, horizontal = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
             icon,
             null,
-            modifier = Modifier.size(40.dp),
+            modifier = Modifier.size(28.dp),
             tint = if (selected) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         Text(
             label,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.labelMedium,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             maxLines = 2,
+            minLines = 2,
             color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
 
-/** Сетка плиток по две в ряд. */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+/**
+ * Лента плиток с прокруткой вбок. Занимает одну строку вместо семи рядов,
+ * поэтому поле темы остаётся на первом экране.
+ */
 @Composable
-fun <T> TileGrid(
+fun <T> TileStrip(
     items: List<T>,
     modifier: Modifier = Modifier,
-    tile: @Composable (T, Modifier) -> Unit
+    tile: @Composable (T) -> Unit
 ) {
-    androidx.compose.foundation.layout.FlowRow(
+    androidx.compose.foundation.lazy.LazyRow(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        maxItemsInEachRow = 2
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 2.dp)
     ) {
-        items.forEach { item ->
-            tile(item, Modifier.weight(1f))
+        items(items.size) { i -> tile(items[i]) }
+    }
+}
+
+/**
+ * Свёрнутый выбор: строка с текущим значением, по нажатию раскрывается сетка.
+ * Предмет выбирают один раз за занятие — незачем держать под него полэкрана.
+ */
+@Composable
+fun CollapsedChoice(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    hint: String,
+    onClick: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            icon,
+            null,
+            modifier = Modifier.size(30.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Spacer(Modifier.size(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.titleMedium)
+            Text(
+                hint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
-        // Нечётное количество: последняя плитка не должна растягиваться на всю ширину.
-        if (items.size % 2 == 1) Spacer(Modifier.weight(1f))
+        Text(
+            "Изменить",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary
+        )
     }
 }

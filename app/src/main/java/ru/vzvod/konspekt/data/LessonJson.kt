@@ -29,6 +29,7 @@ object LessonJson {
         .put("includeSafety", i.includeSafety)
         .put("note", i.note)
         .put("sourceName", i.sourceName)
+        .put("conductedAt", i.conductedAt)
         .put("edits", JSONObject(i.edits))
 
     fun read(o: JSONObject): LessonInput {
@@ -57,6 +58,7 @@ object LessonJson {
             includeSafety = o.optBoolean("includeSafety", true),
             note = o.optString("note", ""),
             sourceName = o.optString("sourceName", ""),
+            conductedAt = o.optLong("conductedAt", 0L),
             edits = readEdits(o.optJSONObject("edits"))
         )
     }

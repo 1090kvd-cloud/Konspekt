@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -68,7 +69,8 @@ import ru.vzvod.konspekt.model.Material
 fun MaterialsScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var filter by remember { mutableStateOf<String?>(null) }
-    var pendingDiscipline by remember { mutableStateOf<String?>(null) }
+    // Выбранные файлы ждут, пока укажут предмет: сначала «что», потом «куда».
+    var pending by remember { mutableStateOf<List<android.net.Uri>>(emptyList()) }
     var error by remember { mutableStateOf("") }
     var renaming by remember { mutableStateOf<Material?>(null) }
     var retargeting by remember { mutableStateOf<Material?>(null) }
@@ -77,11 +79,7 @@ fun MaterialsScreen(modifier: Modifier = Modifier) {
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
-        var failed = 0
-        uris.forEach { uri ->
-            Materials.add(context, uri, pendingDiscipline).onFailure { failed++ }
-        }
-        error = if (failed > 0) "Не удалось приложить файлов: $failed" else ""
+        if (uris.isNotEmpty()) pending = uris
     }
 
     val shown = if (filter == null) Materials.all.toList()
@@ -90,33 +88,13 @@ fun MaterialsScreen(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
 
-            Section(
-                "Куда приложить",
-                "Материал появится на занятиях по выбранному предмету"
-            ) {
-                ChoiceTile(
-                    icon = Icons.Filled.Apps,
-                    label = "Общие — для всех предметов",
-                    selected = pendingDiscipline == null,
-                    modifier = Modifier.fillMaxWidth()
-                ) { pendingDiscipline = null }
-                Spacer(Modifier.height(10.dp))
-                TileGrid(Library.all) { d, m ->
-                    ChoiceTile(
-                        icon = disciplineIcon(d.id),
-                        label = d.short,
-                        selected = pendingDiscipline == d.id,
-                        modifier = m
-                    ) { pendingDiscipline = d.id }
-                }
-                if (error.isNotBlank()) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        error,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
+            if (error.isNotBlank()) {
+                Text(
+                    error,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
+                )
             }
 
             if (Materials.all.isEmpty()) {
@@ -129,9 +107,9 @@ fun MaterialsScreen(modifier: Modifier = Modifier) {
                     Text("Материалов пока нет", style = MaterialTheme.typography.headlineSmall)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Приложите методичку, выписку из устава, таблицу нормативов или фото плаката. " +
-
-                            "Файл скопируется в приложение и будет открываться без интернета — даже если исходный удалить.",
+                        "Нажмите кнопку с плюсом справа, выберите методички — приложение " +
+                            "спросит, к какому предмету их отнести. Файлы копируются внутрь " +
+                            "и открываются без интернета, даже если исходные удалить.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -178,6 +156,21 @@ fun MaterialsScreen(modifier: Modifier = Modifier) {
         SideActionButton(
             onClick = { picker.launch(arrayOf("*/*")) },
             modifier = Modifier.align(Alignment.CenterEnd)
+        )
+    }
+
+    if (pending.isNotEmpty()) {
+        AttachDialog(
+            count = pending.size,
+            onPick = { disciplineId ->
+                var failed = 0
+                pending.forEach { uri ->
+                    Materials.add(context, uri, disciplineId).onFailure { failed++ }
+                }
+                error = if (failed > 0) "Не удалось приложить файлов: $failed" else ""
+                pending = emptyList()
+            },
+            onDismiss = { pending = emptyList() }
         )
     }
 
@@ -382,4 +375,48 @@ private fun SideActionButton(onClick: () -> Unit, modifier: Modifier = Modifier)
     ) {
         Icon(Icons.Filled.Add, "Приложить файл", modifier = Modifier.size(26.dp))
     }
+}
+
+/** Спрашивает предмет для только что выбранных файлов. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AttachDialog(
+    count: Int,
+    onPick: (String?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (count == 1) "К какому предмету?" else "К какому предмету? Файлов: $count") },
+        text = {
+            Column(
+                Modifier
+                    .heightIn(max = 460.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    "Материал появится на занятиях по выбранному предмету.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(10.dp))
+                ChoiceTile(
+                    icon = Icons.Filled.Apps,
+                    label = "Общие — для всех предметов",
+                    selected = false,
+                    modifier = Modifier.fillMaxWidth()
+                ) { onPick(null) }
+                Spacer(Modifier.height(10.dp))
+                TileGrid(Library.all) { d, m ->
+                    ChoiceTile(
+                        icon = disciplineIcon(d.id),
+                        label = d.short,
+                        selected = false,
+                        modifier = m
+                    ) { onPick(d.id) }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
+    )
 }

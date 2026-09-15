@@ -63,6 +63,7 @@ fun ArchiveScreen(
     onOpen: (LessonInput) -> Unit,
     onEditConditions: (LessonInput) -> Unit,
     onDuplicate: (LessonInput) -> Unit,
+    onToggleConducted: (LessonInput) -> Unit,
     onDelete: (LessonInput) -> Unit,
     onImported: (List<LessonInput>) -> Unit,
     modifier: Modifier = Modifier
@@ -233,11 +234,14 @@ fun ArchiveScreen(
                         .padding(start = 20.dp, end = 8.dp, top = 14.dp, bottom = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val done = item.conductedAt > 0
                     Column(Modifier.weight(1f)) {
                         // Заголовок — наименование занятия: у серии по одной теме оно разное.
                         Text(
                             item.lessonTitle.ifBlank { item.topic }.ifBlank { "Без темы" },
                             style = MaterialTheme.typography.titleMedium,
+                            color = if (done) MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.onSurface,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -255,7 +259,8 @@ fun ArchiveScreen(
                         Text(
                             "Занятие ${item.lessonNo} · ${Library.byId(item.disciplineId).short} · " +
                                 "${item.minutes} мин · ${fmt.format(Date(item.createdAt))}" +
-                                if (item.sourceName.isNotBlank()) " · есть оригинал" else "",
+                                (if (item.sourceName.isNotBlank()) " · есть оригинал" else "") +
+                                (if (done) " · проведено ${fmt.format(Date(item.conductedAt))}" else ""),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -264,6 +269,8 @@ fun ArchiveScreen(
                         onOpen = { onOpen(item) },
                         onEditConditions = { onEditConditions(item) },
                         onDuplicate = { onDuplicate(item) },
+                        conducted = done,
+                        onToggleConducted = { onToggleConducted(item) },
                         hasSource = item.sourceName.isNotBlank(),
                         onSource = { Sources.open(context, item.sourceName) },
                         onDelete = { onDelete(item) }
@@ -481,6 +488,8 @@ private fun ArchiveMenu(
     onOpen: () -> Unit,
     onEditConditions: () -> Unit,
     onDuplicate: () -> Unit,
+    conducted: Boolean,
+    onToggleConducted: () -> Unit,
     hasSource: Boolean,
     onSource: () -> Unit,
     onDelete: () -> Unit
@@ -495,6 +504,10 @@ private fun ArchiveMenu(
             DropdownMenuItem(
                 text = { Text("Изменить условия") },
                 onClick = { open = false; onEditConditions() }
+            )
+            DropdownMenuItem(
+                text = { Text(if (conducted) "Снять отметку" else "Отметить проведённым") },
+                onClick = { open = false; onToggleConducted() }
             )
             DropdownMenuItem(
                 text = { Text("Сделать копию") },

@@ -58,6 +58,17 @@ class Store(private val context: Context) {
         persist()
     }
 
+    /** Отметка о проведении: список перестаёт быть свалкой из старого и предстоящего. */
+    fun toggleConducted(id: String) {
+        val idx = archive.indexOfFirst { it.id == id }
+        if (idx < 0) return
+        val item = archive[idx]
+        archive[idx] = item.copy(
+            conductedAt = if (item.conductedAt > 0) 0L else System.currentTimeMillis()
+        )
+        persist()
+    }
+
     fun delete(id: String) {
         // Вместе с занятием убираем и его исходный файл, чтобы не копился мусор.
         archive.firstOrNull { it.id == id }?.sourceName?.let { Sources.remove(context, it) }

@@ -2,16 +2,19 @@ package ru.vzvod.konspekt.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
@@ -59,7 +62,6 @@ fun CreateScreen(
     form: FormState,
     settings: Settings,
     onBuild: () -> Unit,
-    onSeries: () -> Unit,
     onNew: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -67,6 +69,8 @@ fun CreateScreen(
     var showDetails by remember { mutableStateOf(false) }
     var pickDate by remember { mutableStateOf(false) }
     var pickTopic by remember { mutableStateOf(false) }
+    // Сетка предметов раскрыта только пока предмет не выбран осмысленно.
+    var pickDiscipline by remember { mutableStateOf(form.disciplineId == "general") }
 
     // Значения из настроек сразу видны в форме, а не только в готовом документе.
     LaunchedEffect(settings.unitName, settings.leader) {
@@ -76,9 +80,10 @@ fun CreateScreen(
         }
     }
 
+    Box(modifier.fillMaxSize()) {
     Column(
-        modifier
-            .fillMaxWidth()
+        Modifier
+            .fillMaxSize()
             .verticalScroll(rememberScrollState())
     ) {
         if (form.editingId != null) {
@@ -91,13 +96,24 @@ fun CreateScreen(
         }
 
         Section("Предмет обучения") {
-            TileGrid(Library.all) { d, m ->
-                ChoiceTile(
-                    icon = disciplineIcon(d.id),
-                    label = d.short,
-                    selected = d.id == form.disciplineId,
-                    modifier = m
-                ) { form.disciplineId = d.id }
+            if (pickDiscipline) {
+                TileGrid(Library.all) { d, m ->
+                    ChoiceTile(
+                        icon = disciplineIcon(d.id),
+                        label = d.short,
+                        selected = d.id == form.disciplineId,
+                        modifier = m
+                    ) {
+                        form.disciplineId = d.id
+                        pickDiscipline = false
+                    }
+                }
+            } else {
+                CollapsedChoice(
+                    icon = disciplineIcon(discipline.id),
+                    label = discipline.name,
+                    hint = "Нажмите, чтобы выбрать другой предмет"
+                ) { pickDiscipline = true }
             }
         }
 
@@ -240,26 +256,6 @@ fun CreateScreen(
             }
         }
 
-        Section("Что вложить в комплект") {
-            ToggleRow(
-                "Раздаточный материал",
-                "Заготовка с прочерками; чаще проще размножить лист из методички",
-                form.includeHandout
-            ) { form.includeHandout = it }
-            ThinRule(Modifier.padding(vertical = 4.dp))
-            ToggleRow(
-                "Контрольные вопросы",
-                "Для опроса в заключительной части",
-                form.includeControl
-            ) { form.includeControl = it }
-            ThinRule(Modifier.padding(vertical = 4.dp))
-            ToggleRow(
-                "Требования безопасности",
-                "Отдельный раздел и пункт инструктажа",
-                form.includeSafety
-            ) { form.includeSafety = it }
-        }
-
         TextButton(
             onClick = { showDetails = !showDetails },
             modifier = Modifier.padding(start = 20.dp)
@@ -270,7 +266,7 @@ fun CreateScreen(
                 modifier = Modifier.size(20.dp)
             )
             Spacer(Modifier.size(6.dp))
-            Text(if (showDetails) "Свернуть шапку документа" else "Заполнить шапку документа")
+            Text(if (showDetails) "Свернуть дополнительное" else "Шапка, место, метод, комплект")
         }
 
         AnimatedVisibility(visible = showDetails) {
@@ -346,6 +342,26 @@ fun CreateScreen(
                     }
                 }
 
+                Section("Что вложить в комплект") {
+                    ToggleRow(
+                        "Раздаточный материал",
+                        "Собирается из вписанного вами содержания",
+                        form.includeHandout
+                    ) { form.includeHandout = it }
+                    ThinRule(Modifier.padding(vertical = 4.dp))
+                    ToggleRow(
+                        "Контрольные вопросы",
+                        "Для опроса в заключительной части",
+                        form.includeControl
+                    ) { form.includeControl = it }
+                    ThinRule(Modifier.padding(vertical = 4.dp))
+                    ToggleRow(
+                        "Требования безопасности",
+                        "Отдельный раздел и пункт инструктажа",
+                        form.includeSafety
+                    ) { form.includeSafety = it }
+                }
+
                 Section("Примечания", "Попадут отдельным разделом в конспект") {
                     OutlinedTextField(
                         value = form.note,
@@ -358,31 +374,30 @@ fun CreateScreen(
             }
         }
 
+        // Место под закреплённую кнопку, чтобы она не перекрывала последний блок.
+        Spacer(Modifier.height(96.dp))
+    }
+
+    // Кнопка всегда на виду: до неё не нужно долистывать длинную форму.
+    Column(
+        Modifier
+            .align(Alignment.BottomCenter)
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 16.dp, top = 6.dp, bottom = 10.dp)
+    ) {
         Button(
             onClick = onBuild,
             enabled = form.topic.isNotBlank(),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                .height(54.dp)
+            modifier = Modifier.fillMaxWidth().height(52.dp)
         ) {
-            Text("Собрать конспект", style = MaterialTheme.typography.titleMedium)
+            Text(
+                if (form.topic.isBlank()) "Введите тему занятия"
+                else "Собрать конспект",
+                style = MaterialTheme.typography.titleMedium
+            )
         }
-
-        TextButton(
-            onClick = onSeries,
-            enabled = form.topic.isNotBlank(),
-            modifier = Modifier.padding(start = 20.dp)
-        ) { Text("Сразу заготовки на всю тему") }
-
-        Text(
-            if (form.topic.isBlank()) "Введите тему — кнопки станут активными"
-            else "Готовый комплект можно отправить, скопировать или сохранить в PDF",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 20.dp)
-        )
-        Spacer(Modifier.height(28.dp))
+    }
     }
 
     if (pickTopic) {
