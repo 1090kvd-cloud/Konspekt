@@ -20,9 +20,49 @@ object LessonImport {
     private val mainMark = Regex("основная\\s+часть", RegexOption.IGNORE_CASE)
     private val outroMark = Regex("заключительная\\s+часть", RegexOption.IGNORE_CASE)
     private val runMark = Regex("^ход\\s+занятия", RegexOption.IGNORE_CASE)
+    private val signMark = Regex("^руководител[ья]\\s+занятия", RegexOption.IGNORE_CASE)
+
+    /** Строки таблицы, которые не являются содержанием: время, подпись, линейки. */
+    private val noise = listOf(
+        Regex("^\\d{1,3}\\s*мин\\.?$"),
+        Regex("^[_\\s]+$"),
+        Regex("^«___».*20___.*$")
+    )
+
+    /** Действия обучаемых: в таблице это соседняя графа, её нельзя мешать с содержанием. */
+    private val traineeStarts = listOf(
+        "слушают", "строятся", "отвечают", "выполняют", "докладывают", "переводят",
+        "задают", "наблюдают", "сдают", "записывают", "конспектируют", "повторяют",
+        "устраняют", "самостоятельно выполняют", "прием доклада", "приём доклада",
+        "проверка готовности"
+    )
+
+    private fun isNoise(line: String) = noise.any { it.matches(line.trim()) } ||
+        signMark.containsMatchIn(line)
+
+    private fun isTrainee(line: String): Boolean {
+        val l = line.trim().lowercase()
+        return traineeStarts.any { l.startsWith(it) }
+    }
+
+    /** Делит плоский текст графы на содержание и действия обучаемых. */
+    private fun divide(lines: List<String>): Pair<String, String> {
+        val content = ArrayList<String>()
+        val trainee = ArrayList<String>()
+        lines.forEach { l ->
+            when {
+                isNoise(l) -> Unit
+                isTrainee(l) -> if (!trainee.contains(l)) trainee.add(l)
+                else -> content.add(l)
+            }
+        }
+        return content.joinToString("\n") to trainee.joinToString("\n")
+    }
 
     fun parse(text: String, fileName: String): Outcome {
-        val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        val table = tableRows(text)
+        val lines = TextExtract.withoutTableMarks(text)
+            .lines().map { it.trim() }.filter { it.isNotEmpty() }
         if (lines.isEmpty()) return Outcome(null, "$fileName — пустой файл")
 
         val head = lines.take(60)
@@ -39,7 +79,9 @@ object LessonImport {
         val safety = headedBlock(lines, Regex("^Требования безопасн", RegexOption.IGNORE_CASE))
 
         val edits = HashMap<String, String>()
-        if (goals.isNotEmpty()) edits[Generator.Keys.GOALS] = goals.joinToString("\n")
+        if (goals.isNotEmpty()) {
+            edits[Generator.Keys.GOALS] = goals.joinToString("\n") { unnumber(it) }
+        }
         if (safety.isNotEmpty()) edits[Generator.Keys.SAFETY] = safety.joinToString("\n")
         if (provision.isNotBlank()) {
             edits[Generator.Keys.PROVISION] = provision
@@ -49,13 +91,17 @@ object LessonImport {
                 .joinToString("\n")
         }
 
-        val run = runSection(lines)
+        // Если ход занятия свёрстан таблицей, берём его по ячейкам:
+        // содержание и действия обучаемых лежат в разных колонках.
+        val run = tableRun(table) ?: runSection(lines)
         run.intro?.let {
             edits[Generator.Keys.INTRO_CONTENT] = it.body
+            if (it.trainee.isNotBlank()) edits[Generator.Keys.INTRO_TRAINEE] = it.trainee
             it.minutes?.let { m -> edits[Generator.Keys.INTRO_MIN] = m.toString() }
         }
         run.outro?.let {
             edits[Generator.Keys.OUTRO_CONTENT] = it.body
+            if (it.trainee.isNotBlank()) edits[Generator.Keys.OUTRO_TRAINEE] = it.trainee
             it.minutes?.let { m -> edits[Generator.Keys.OUTRO_MIN] = m.toString() }
         }
 
@@ -65,11 +111,13 @@ object LessonImport {
             questions.add(q.title)
             edits[Generator.Keys.qTitle(n)] = q.title
             if (q.body.isNotBlank()) edits[Generator.Keys.qContent(n)] = q.body
+            if (q.trainee.isNotBlank()) edits[Generator.Keys.qTrainee(n)] = q.trainee
             q.minutes?.let { edits[Generator.Keys.qMinutes(n)] = it.toString() }
         }
 
-        val total = parseMinutes(timeLine).takeIf { it > 0 }
-            ?: run.totalMinutes().takeIf { it > 0 }
+        // Время частей надёжнее строки в шапке: в ней часто стоит «1 час» на глазок.
+        val total = run.totalMinutes().takeIf { it > 0 }
+            ?: parseMinutes(timeLine).takeIf { it > 0 }
             ?: 90
 
         val effectiveTopic = topic.ifBlank { lessonTitle }.ifBlank {
@@ -108,9 +156,123 @@ object LessonImport {
         return Outcome(lesson, note)
     }
 
+    /** «1. Научить…» -> «Научить…»: номер проставит документ, иначе выйдет «1. 1.». */
+    private fun unnumber(line: String): String =
+        line.replace(Regex("^\\d{1,2}[\\.\\)]\\s*"), "").trim()
+
+    // --- ход занятия по ячейкам таблицы ---
+
+    private fun tableRows(text: String): List<List<String>> {
+        if (!text.contains(TextExtract.ROW)) return emptyList()
+        return text.split(TextExtract.ROW)
+            .map { row ->
+                row.split(TextExtract.CELL)
+                    .map { cell -> cell.lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n") }
+                    .filter { it.isNotEmpty() || true }
+            }
+            .filter { it.any { cell -> cell.isNotBlank() } }
+    }
+
+    /**
+     * Ожидаемая вёрстка: № | учебные вопросы и время | содержание | действия обучаемых.
+     *
+     * Внутри ячеек попадаются вложенные таблицы — например перечень огневых задач.
+     * Поэтому границы частей ищем по словам «вводная», «основная», «заключительная»,
+     * а всё между ними присоединяем к текущей части, а не считаем новым вопросом.
+     */
+    private fun tableRun(rows: List<List<String>>): Run? {
+        if (rows.size < 2) return null
+
+        data class Acc(var head: String, val body: StringBuilder, val trainee: StringBuilder, var minutes: Int?)
+
+        var current: Acc? = null
+        var stage = ""
+        var intro: Part? = null
+        var outro: Part? = null
+        val mains = ArrayList<Acc>()
+
+        fun flush() {
+            val acc = current ?: return
+            val part = Part(acc.head, acc.body.toString().trim(), acc.minutes, acc.trainee.toString().trim())
+            when (stage) {
+                "intro" -> if (intro == null) intro = part
+                "outro" -> outro = part
+                else -> mains.add(acc)
+            }
+            current = null
+        }
+
+        rows.forEach { cells ->
+            if (cells.size < 3) return@forEach
+            val head = cells.getOrElse(1) { "" }
+            val body = cells.getOrElse(2) { "" }
+            val trainee = cells.getOrElse(3) { "" }
+            if (head.contains("учебные вопросы", true) && body.contains("содержание", true)) return@forEach
+
+            val mark = (head + " " + body.lineSequence().firstOrNull().orEmpty()).lowercase()
+            val newStage = when {
+                introMark.containsMatchIn(mark) -> "intro"
+                outroMark.containsMatchIn(mark) -> "outro"
+                mainMark.containsMatchIn(mark) -> "main"
+                else -> null
+            }
+            val clean = body.lines()
+                .filterNot { Regex("^\\d{1,3}\\s*мин\\.?$").matches(it.trim()) }
+                .joinToString("\n")
+                .trim()
+
+            if (newStage != null) {
+                flush()
+                stage = newStage
+                current = Acc(
+                    head = when (newStage) {
+                        "intro" -> "Вводная часть"
+                        "outro" -> "Заключительная часть"
+                        else -> ""
+                    },
+                    body = StringBuilder(clean),
+                    trainee = StringBuilder(trainee),
+                    minutes = minutesIn(head.lines() + body.lines().take(2))
+                )
+            } else {
+                // Продолжение текущей части: вложенная таблица, перенос строки и т. п.
+                val acc = current ?: return@forEach
+                if (clean.isNotBlank()) {
+                    if (acc.body.isNotEmpty()) acc.body.append('\n')
+                    acc.body.append(clean)
+                }
+                if (trainee.isNotBlank()) {
+                    if (acc.trainee.isNotEmpty()) acc.trainee.append('\n')
+                    acc.trainee.append(trainee)
+                }
+            }
+        }
+        flush()
+
+        if (intro == null && mains.isEmpty()) return null
+
+        val questions = mains.map { acc ->
+            val first = acc.body.lineSequence().firstOrNull()?.trim().orEmpty()
+            val isTitle = first.length in 10..200 && !first.endsWith('.')
+            Part(
+                title = if (isTitle) first else "Основная часть",
+                body = if (isTitle) acc.body.lines().drop(1).joinToString("\n").trim()
+                else acc.body.toString().trim(),
+                minutes = acc.minutes,
+                trainee = acc.trainee.toString().trim()
+            )
+        }
+        return Run(intro, questions.take(6), outro)
+    }
+
     // --- ход занятия ---
 
-    private data class Part(val title: String, val body: String, val minutes: Int?)
+    private data class Part(
+        val title: String,
+        val body: String,
+        val minutes: Int?,
+        val trainee: String = ""
+    )
 
     private data class Run(val intro: Part?, val questions: List<Part>, val outro: Part?) {
         fun totalMinutes(): Int =
@@ -134,7 +296,10 @@ object LessonImport {
 
         val introLines = slice(iIntro, if (iMain >= 0) iMain else iOutro)
         val mainLines = slice(iMain, iOutro)
-        val outroLines = slice(iOutro, -1)
+        val outroRaw = slice(iOutro, -1)
+        // Ниже подписи руководителя документ кончается — в содержание она не идёт.
+        val signAt = outroRaw.indexOfFirst { signMark.containsMatchIn(it) }
+        val outroLines = if (signAt > 0) outroRaw.take(signAt) else outroRaw
 
         val intro = introLines.takeIf { it.isNotEmpty() }?.let {
             Part("Вводная часть", strip(it, introMark).joinToString("\n"), minutesIn(it.take(3)))

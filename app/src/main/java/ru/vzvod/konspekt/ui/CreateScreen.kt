@@ -62,6 +62,7 @@ fun CreateScreen(
     form: FormState,
     settings: Settings,
     onBuild: () -> Unit,
+    onSeries: () -> Unit,
     onNew: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -86,12 +87,10 @@ fun CreateScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
     ) {
-        if (form.editingId != null) {
-            Section(
-                "Изменяется сохранённое занятие",
-                "После сборки нажмите «Сохранить» — запись в архиве обновится"
-            ) {
-                TextButton(onClick = onNew) { Text("Начать новое занятие") }
+        Row(Modifier.padding(start = 8.dp, end = 8.dp, top = 2.dp)) {
+            TextButton(onClick = onNew) { Text("Новое занятие") }
+            TextButton(onClick = onSeries, enabled = form.topic.isNotBlank()) {
+                Text("Серия по теме")
             }
         }
 

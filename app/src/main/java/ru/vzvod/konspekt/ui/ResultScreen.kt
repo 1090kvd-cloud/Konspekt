@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -20,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Attachment
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.ContentCopy
@@ -28,6 +30,7 @@ import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,12 +38,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -71,6 +76,7 @@ fun ResultScreen(
 ) {
     val context = LocalContext.current
     var tab by remember { mutableIntStateOf(0) }
+    var showMaterials by remember { mutableStateOf(false) }
 
     val tabs = buildList {
         add("Конспект")
@@ -97,6 +103,13 @@ fun ResultScreen(
         }
     }
 
+    if (showMaterials) {
+        MaterialsDialog(
+            disciplineId = plan.input.disciplineId,
+            onDismiss = { showMaterials = false }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -120,6 +133,15 @@ fun ResultScreen(
                     }
                 },
                 actions = {
+                    val materials = Materials.forDiscipline(plan.input.disciplineId)
+                    if (materials.isNotEmpty()) {
+                        IconButton(onClick = { showMaterials = true }) {
+                            Icon(
+                                Icons.Filled.AttachFile,
+                                "Материалы к занятию: ${materials.size}"
+                            )
+                        }
+                    }
                     IconButton(onClick = onConditions) {
                         Icon(Icons.Filled.Tune, "Изменить условия занятия")
                     }
@@ -347,41 +369,6 @@ private fun PlanView(plan: LessonPlan, settings: Settings) {
             Text(i.note, style = MaterialTheme.typography.bodyMedium)
         }
 
-        val materials = Materials.forDiscipline(i.disciplineId)
-        if (materials.isNotEmpty()) {
-            val context = LocalContext.current
-            DocHeading("МАТЕРИАЛЫ К ЗАНЯТИЮ")
-            materials.forEach { m ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable { Materials.open(context, m) }
-                        .padding(vertical = 8.dp)
-                ) {
-                    Text(
-                        "→",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier.width(22.dp)
-                    )
-                    Column(Modifier.weight(1f)) {
-                        Text(m.title, style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            "${Materials.kindText(m)} · ${Materials.sizeText(m.size)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-            Text(
-                "Раздел для подготовки: в печатный документ и в отправку он не попадает.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-        }
-
         Spacer(Modifier.height(26.dp))
         Text(
             "Руководитель занятия",
@@ -529,4 +516,43 @@ private fun rawText(plan: LessonPlan, settings: Settings, tab: String?): String 
     "Раздатка" -> Renderer.handoutText(plan, settings)
     "Вопросы" -> Renderer.controlText(plan)
     else -> Renderer.planText(plan, settings)
+}
+
+/** Приложенные методички — отдельным списком, чтобы не занимать место в документе. */
+@Composable
+private fun MaterialsDialog(disciplineId: String, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val items = Materials.forDiscipline(disciplineId)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Материалы к занятию") },
+        text = {
+            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                Text(
+                    "Наименования входят в материальное обеспечение. " +
+                        "Нажмите, чтобы открыть файл.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(10.dp))
+                items.forEach { m ->
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { Materials.open(context, m) }
+                            .padding(vertical = 10.dp)
+                    ) {
+                        Text(m.title, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "${Materials.kindText(m)} · ${Materials.sizeText(m.size)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    ThinRule()
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } }
+    )
 }

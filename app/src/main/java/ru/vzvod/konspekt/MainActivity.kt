@@ -87,7 +87,6 @@ fun AppRoot() {
     var current by remember { mutableStateOf<LessonInput?>(null) }
     var editing by remember { mutableStateOf(false) }
     var series by remember { mutableStateOf(false) }
-    var menuOpen by remember { mutableStateOf(false) }
 
     // Черновик пишется при каждом переходе между вкладками: набранное не пропадёт.
     LaunchedEffect(tab) {
@@ -152,18 +151,6 @@ fun AppRoot() {
                 return@Surface
             }
 
-            if (menuOpen) {
-                MainMenu(
-                    onNew = {
-                        menuOpen = false
-                        form.reset(store.settings)
-                        tab = Tab.Create
-                    },
-                    onSeries = { menuOpen = false; series = true },
-                    onDismiss = { menuOpen = false }
-                )
-            }
-
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
                 topBar = {
@@ -176,8 +163,7 @@ fun AppRoot() {
                             Tab.Archive -> "конспектов: ${store.archive.size}"
                             Tab.Materials -> "материалов: ${Materials.all.size}"
                             Tab.Settings -> "версия 1.0"
-                        },
-                        onMenu = { menuOpen = true }
+                        }
                     )
                 },
                 bottomBar = {
@@ -213,7 +199,13 @@ fun AppRoot() {
                             store.saveDraft(input)
                             current = input
                         },
-                        onNew = { form.reset(store.settings) },
+                        onSeries = { series = true },
+                        onNew = {
+                            // Сбрасываем и форму, и сохранённый черновик, иначе
+                            // старое занятие вернётся при следующем запуске.
+                            form.reset(store.settings)
+                            store.saveDraft(null)
+                        },
                         modifier = m
                     )
 
@@ -250,38 +242,3 @@ fun AppRoot() {
     }
 }
 
-/** Меню из шапки: разделы и то, что раньше приходилось искать внутри экранов. */
-@Composable
-private fun MainMenu(
-    onNew: () -> Unit,
-    onSeries: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Быстрые действия") },
-        text = {
-            Column {
-                Text(
-                    "Новое занятие",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onNew() }
-                        .padding(vertical = 12.dp)
-                )
-                Text(
-                    "Серия занятий по теме",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSeries() }
-                        .padding(vertical = 12.dp)
-                )
-            }
-        },
-        confirmButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Закрыть") }
-        }
-    )
-}

@@ -31,6 +31,10 @@ object DocxWriter {
 
     // --- разметка документа ---
 
+    /** Убирает нумерацию, оставшуюся в тексте: документ нумерует пункты сам. */
+    private fun unnumbered(line: String) =
+        line.replace(Regex("^(\\d{1,2}[\\.\\)]\\s*)+"), "").trim()
+
     private fun esc(t: String) = t
         .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
@@ -102,7 +106,9 @@ object DocxWriter {
         }
 
         body.append(keyValue("ЦЕЛИ:", ""))
-        plan.goals.forEachIndexed { n, g -> body.append(p("${n + 1}. $g", ind = 709)) }
+        plan.goals.forEachIndexed { n, g ->
+            body.append(p("${n + 1}. ${unnumbered(g)}", ind = 709))
+        }
 
         body.append(keyValue("Время:", i.timeLabel.ifBlank { Generator.timeText(i.minutes) } + "        " +
             (i.date.ifBlank { "«___» __________ 20___ г." })))

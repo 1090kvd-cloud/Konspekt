@@ -47,7 +47,7 @@ object Renderer {
         appendLine("ЗАНЯТИЕ ${i.lessonNo}: ${lessonTitle(plan).uppercase()}")
         appendLine()
         appendLine("ЦЕЛИ:")
-        plan.goals.forEachIndexed { k, g -> appendLine("${k + 1}. $g") }
+        plan.goals.forEachIndexed { k, g -> appendLine("${k + 1}. ${unnumbered(g)}") }
         appendLine()
         appendLine("Время: ${timeOf(plan)};    «____» ____________ 20____ г.")
         appendLine("Место: ${plan.place}.")
@@ -137,6 +137,10 @@ object Renderer {
 
     // ---------- HTML для печати / PDF ----------
 
+    /** Нумерация пунктов ставится при выводе, в тексте её быть не должно. */
+    private fun unnumbered(line: String) =
+        line.replace(Regex("^(\\d{1,2}[\\.\\)]\\s*)+"), "").trim()
+
     private fun esc(s: String) = s
         .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
@@ -187,7 +191,7 @@ object Renderer {
 
         sb.append("<p class=\"key\" style=\"text-indent:1.25cm\">ЦЕЛИ:</p>")
         plan.goals.forEachIndexed { k, g ->
-            sb.append("<p style=\"text-indent:1.25cm\">${k + 1}. ${esc(g)}</p>")
+            sb.append("<p style=\"text-indent:1.25cm\">${k + 1}. ${esc(unnumbered(g))}</p>")
         }
 
         sb.append("<p style=\"text-indent:1.25cm\"><span class=\"key\">Время:</span> ${timeOf(plan)};&nbsp;&nbsp;&nbsp;&nbsp;«___» __________ 20___ г.</p>")

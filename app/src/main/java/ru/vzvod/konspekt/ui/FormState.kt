@@ -97,6 +97,8 @@ class FormState(settings: Settings) {
 
     fun reset(settings: Settings) {
         editingId = null
+        // Предмет тоже сбрасываем: иначе «новое занятие» выглядит как ничего не произошло.
+        disciplineId = "general"
         topic = ""
         themeNo = "1"
         lessonNo = "1"

@@ -215,53 +215,23 @@ fun KeyValue(key: String, value: String) {
 }
 
 
-/** Шапка экрана: кнопка меню слева, заголовок по центру и счётчик под ним. */
+/** Шапка экрана: заголовок и короткая сводка под ним. */
 @Composable
-fun AppHeader(
-    title: String,
-    subtitle: String,
-    onMenu: () -> Unit
-) {
-    Row(
+fun AppHeader(title: String, subtitle: String) {
+    Column(
         Modifier
             .fillMaxWidth()
-            .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
-            Modifier
-                .size(52.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
-                .clickable(onClick = onMenu),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Filled.Menu,
-                "Меню",
-                modifier = Modifier.size(26.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Column(
-            Modifier.weight(1f),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+        Text(title, style = MaterialTheme.typography.headlineLarge, maxLines = 1)
+        if (subtitle.isNotBlank()) {
             Text(
-                title,
-                style = MaterialTheme.typography.headlineLarge,
-                maxLines = 1
+                subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (subtitle.isNotBlank()) {
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
-        // Уравновешивает кнопку слева, чтобы заголовок стоял по центру экрана.
-        Spacer(Modifier.size(52.dp))
     }
 }
 

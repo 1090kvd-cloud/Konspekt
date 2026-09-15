@@ -34,7 +34,9 @@ object TextExtract {
 
         val result = fromFile(source, m.storedName, context)
         if (result is Result.Ok) {
-            runCatching { cache.writeText(result.text) }
+            val clean = withoutTableMarks(result.text)
+            runCatching { cache.writeText(clean) }
+            return Result.Ok(clean)
         }
         return result
     }
@@ -104,6 +106,10 @@ object TextExtract {
     }
 
     /** .docx — это zip, текст лежит в word/document.xml. */
+    /** Разделители ячеек и строк таблицы: без них ход занятия слипается в кашу. */
+    const val CELL = "\u0001"
+    const val ROW = "\u0002"
+
     private fun readDocx(file: File): Result {
         val xml = plainDocx(file)
             ?: return Result.Unsupported("Внутри .docx нет текстовой части")
@@ -111,8 +117,14 @@ object TextExtract {
             .replace(Regex("<w:tab[^>]*/>"), " ")
             .replace(Regex("<w:br[^>]*/>"), "\n")
             .replace(Regex("</w:p>"), "\n")
+            .replace(Regex("</w:tc>"), CELL)
+            .replace(Regex("</w:tr>"), ROW + "\n")
         return Result.Ok(stripTags(withBreaks))
     }
+
+    /** Для поиска по материалам разметка таблицы не нужна. */
+    fun withoutTableMarks(text: String): String =
+        text.replace(CELL, "\n").replace(ROW, "\n")
 
     private fun plainDocx(file: File): String? = runCatching {
         ZipFile(file).use { zip ->
