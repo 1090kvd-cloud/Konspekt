@@ -384,7 +384,7 @@ fun CreateScreen(
             .align(Alignment.BottomCenter)
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 16.dp, top = 6.dp, bottom = 10.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 10.dp)
     ) {
         Button(
             onClick = onBuild,
