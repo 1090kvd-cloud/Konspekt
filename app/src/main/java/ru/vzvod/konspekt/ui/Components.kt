@@ -371,3 +371,65 @@ fun CollapsedChoice(
         )
     }
 }
+
+/** Сетка плиток по две в ряд. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun <T> TileGrid(
+    items: List<T>,
+    modifier: Modifier = Modifier,
+    tile: @Composable (T, Modifier) -> Unit
+) {
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        maxItemsInEachRow = 2
+    ) {
+        items.forEach { item ->
+            tile(item, Modifier.weight(1f))
+        }
+        // Нечётное количество: последняя плитка не должна растягиваться на всю ширину.
+        if (items.size % 2 == 1) Spacer(Modifier.weight(1f))
+    }
+}
+
+/** Сетка плиток по две в ряд: крупные цели для пальца, ровные ряды. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun <T> TileGrid(
+    items: List<T>,
+    modifier: Modifier = Modifier,
+    tile: @Composable (T, Modifier) -> Unit
+) {
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        maxItemsInEachRow = 2
+    ) {
+        items.forEach { item -> tile(item, Modifier.weight(1f)) }
+        // Нечётное количество: последняя плитка не должна растягиваться на всю ширину.
+        if (items.size % 2 == 1) Spacer(Modifier.weight(1f))
+    }
+}
+
+/** Сетка плиток по две в ряд: крупные цели для пальца, ровные ряды. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun <T> TileGrid(
+    items: List<T>,
+    modifier: Modifier = Modifier,
+    tile: @Composable (T, Modifier) -> Unit
+) {
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        maxItemsInEachRow = 2
+    ) {
+        items.forEach { item -> tile(item, Modifier.weight(1f)) }
+        // Нечётное количество: последняя плитка не должна растягиваться на всю ширину.
+        if (items.size % 2 == 1) Spacer(Modifier.weight(1f))
+    }
+}
