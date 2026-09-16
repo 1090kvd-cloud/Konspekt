@@ -302,10 +302,12 @@ object LessonImport {
         val outroLines = if (signAt > 0) outroRaw.take(signAt) else outroRaw
 
         val intro = introLines.takeIf { it.isNotEmpty() }?.let {
-            Part("Вводная часть", strip(it, introMark).joinToString("\n"), minutesIn(it.take(3)))
+            val (content, trainee) = divide(strip(it, introMark))
+            Part("Вводная часть", content, minutesIn(it.take(3)), trainee)
         }
         val outro = outroLines.takeIf { it.isNotEmpty() }?.let {
-            Part("Заключительная часть", strip(it, outroMark).joinToString("\n"), minutesIn(it.take(3)))
+            val (content, trainee) = divide(strip(it, outroMark))
+            Part("Заключительная часть", content, minutesIn(it.take(3)), trainee)
         }
         return Run(intro, questions(mainLines), outro)
     }
@@ -324,17 +326,20 @@ object LessonImport {
         }
 
         if (heads.isEmpty()) {
+            val (content, trainee) = divide(body)
             return listOf(
-                Part("Основная часть", body.joinToString("\n"), minutesIn(mainLines.take(3)))
+                Part("Основная часть", content, minutesIn(mainLines.take(3)), trainee)
             )
         }
 
         return heads.mapIndexed { i, (at, rawTitle) ->
             val to = if (i + 1 < heads.size) heads[i + 1].first else body.size
+            val (content, trainee) = divide(body.subList(at + 1, to))
             Part(
                 title = rawTitle.replace(Regex("\\s*[—–-]\\s*\\d+\\s*мин\\.?\\s*$"), "").trim(),
-                body = body.subList(at + 1, to).joinToString("\n"),
-                minutes = minutesIn(listOf(rawTitle))
+                body = content,
+                minutes = minutesIn(listOf(rawTitle)),
+                trainee = trainee
             )
         }
     }

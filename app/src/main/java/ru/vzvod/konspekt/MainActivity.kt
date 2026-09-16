@@ -233,6 +233,11 @@ fun AppRoot() {
                             store.reload()
                             Library.load(context)
                             Materials.load(context)
+                            // Форма должна взять восстановленные данные, иначе она
+                            // перезапишет их своим прежним черновиком.
+                            val restored = store.draft
+                            if (restored != null) form.loadFrom(restored)
+                            else form.reset(store.settings)
                         },
                         modifier = m
                     )
