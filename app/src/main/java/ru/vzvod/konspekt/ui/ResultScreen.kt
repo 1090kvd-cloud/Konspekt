@@ -56,9 +56,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import ru.vzvod.konspekt.data.Materials
+import ru.vzvod.konspekt.data.ShareLesson
 import ru.vzvod.konspekt.data.Sources
+import ru.vzvod.konspekt.logic.DocxRewrite
 import ru.vzvod.konspekt.logic.DocxWriter
 import ru.vzvod.konspekt.logic.Renderer
+import ru.vzvod.konspekt.logic.Review
 import ru.vzvod.konspekt.model.LessonPlan
 import ru.vzvod.konspekt.model.Settings
 import ru.vzvod.konspekt.util.Export
@@ -71,12 +74,14 @@ fun ResultScreen(
     savedAlready: Boolean,
     onSave: () -> Unit,
     onEdit: () -> Unit,
+    autoNotes: List<String> = emptyList(),
     onConditions: () -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     var tab by remember { mutableIntStateOf(0) }
     var showMaterials by remember { mutableStateOf(false) }
+    var showReview by remember { mutableStateOf(false) }
 
     val tabs = buildList {
         add("Конспект")
@@ -96,8 +101,13 @@ fun ResultScreen(
     ) { uri ->
         if (uri != null) {
             runCatching {
-                context.contentResolver.openOutputStream(uri)?.use {
-                    DocxWriter.write(it, plan, settings)
+                val source = Sources.file(context, plan.input.sourceName)
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    // У загруженного конспекта своя вёрстка, таблицы и рисунки:
+                    // правим его копию, а не собираем документ заново.
+                    val done = source != null &&
+                        DocxRewrite.rewrite(source, out, plan, settings).ok
+                    if (!done) DocxWriter.write(out, plan, settings)
                 }
             }
         }
@@ -183,7 +193,8 @@ fun ResultScreen(
                         }
                     } else {
                         ActionButton(Icons.Filled.Share, "Отправить") {
-                            Export.share(context, Renderer.fileName(plan), currentText())
+                            // Занятие целиком: у товарища оно откроется в приложении.
+                            ShareLesson.send(context, listOf(plan.input))
                         }
                     }
                     ActionButton(Icons.Filled.Description, "Word") {
@@ -206,9 +217,9 @@ fun ResultScreen(
 
             if (plan.input.sourceName.isNotBlank()) {
                 Text(
-                    "Конспект загружен из файла. Текст перенесён из него дословно — " +
-                        "Word и PDF соберут его в форме приложения. Кнопка «Оригинал» " +
-                        "открывает исходный файл с его вёрсткой, таблицами и рисунками.",
+                    "Конспект загружен из файла. Кнопка «Word» отдаёт его со своей вёрсткой, " +
+                        "таблицами и рисунками — приложение только подставит дату, " +
+                        "подразделение и руководителя. Текст ниже разобран для правки и поиска.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                     modifier = Modifier
@@ -218,18 +229,60 @@ fun ResultScreen(
                 )
             }
 
-            val gaps = missingFields(plan, settings)
-            if (gaps.isNotEmpty()) {
+            if (autoNotes.isNotEmpty()) {
                 Text(
-                    "Не заполнено: ${gaps.joinToString(", ")}. " +
-                        "Документ распечатается с пустыми местами.",
+                    "Подставлено автоматически: " + autoNotes.joinToString("; ") +
+                        ". Проверьте текст и поправьте, если не подходит.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.tertiaryContainer)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
                         .padding(horizontal = 18.dp, vertical = 8.dp)
                 )
+            }
+
+            val notes = remember(plan) { Review.check(plan, settings) }
+            if (notes.isNotEmpty()) {
+                val errors = Review.errors(notes)
+                val bad = errors > 0
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(
+                            if (bad) MaterialTheme.colorScheme.errorContainer
+                            else MaterialTheme.colorScheme.tertiaryContainer
+                        )
+                        .clickable { showReview = !showReview }
+                        .padding(horizontal = 18.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        if (bad) "Проверка: $errors ${plural(errors)} до сдачи"
+                        else "Проверка: ${notes.size} ${remarks(notes.size)}",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = if (bad) MaterialTheme.colorScheme.onErrorContainer
+                        else MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    if (showReview) {
+                        Spacer(Modifier.height(6.dp))
+                        notes.forEach { n ->
+                            Text(
+                                (if (n.level == Review.Level.ERROR) "• " else "— ") + n.text,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (bad) MaterialTheme.colorScheme.onErrorContainer
+                                else MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            )
+                        }
+                    } else {
+                        Text(
+                            "Нажмите, чтобы посмотреть список",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (bad) MaterialTheme.colorScheme.onErrorContainer
+                            else MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    }
+                }
             }
 
             if (tabs.size > 1) {
@@ -500,17 +553,6 @@ private fun ControlView(plan: LessonPlan) {
     }
 }
 
-/** Что руководитель забыл заполнить. Проверяем перед печатью, а не после. */
-private fun missingFields(plan: LessonPlan, settings: Settings): List<String> {
-    val i = plan.input
-    val out = ArrayList<String>()
-    if (i.date.isBlank()) out.add("дата")
-    if (i.unitName.ifBlank { settings.unitName }.isBlank()) out.add("подразделение")
-    if (i.leader.ifBlank { settings.leader }.isBlank()) out.add("руководитель")
-    if (i.lessonTitle.isBlank()) out.add("наименование занятия")
-    if (plan.place.isBlank()) out.add("место")
-    return out
-}
 
 private fun rawText(plan: LessonPlan, settings: Settings, tab: String?): String = when (tab) {
     "Раздатка" -> Renderer.handoutText(plan, settings)
@@ -556,3 +598,11 @@ private fun MaterialsDialog(disciplineId: String, onDismiss: () -> Unit) {
         confirmButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } }
     )
 }
+
+private fun plural(n: Int): String = when {
+    n % 10 == 1 && n % 100 != 11 -> "замечание"
+    n % 10 in 2..4 && n % 100 !in 12..14 -> "замечания"
+    else -> "замечаний"
+}
+
+private fun remarks(n: Int): String = plural(n)

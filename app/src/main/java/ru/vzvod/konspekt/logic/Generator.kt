@@ -1,5 +1,6 @@
 package ru.vzvod.konspekt.logic
 
+import ru.vzvod.konspekt.data.Learned
 import ru.vzvod.konspekt.data.Library
 import ru.vzvod.konspekt.data.Materials
 import ru.vzvod.konspekt.model.HandoutBlock
@@ -57,7 +58,13 @@ object Generator {
         val main = max(5, total - edge * 2)
 
         val titles = questionTitles(input, d, ::t)
-        val slices = split(main, titles.size)
+        // Объём содержания известен только для заполненных вопросов —
+        // по нему и делим, иначе поровну.
+        val weights = titles.indices.map { idx ->
+            input.edits[Keys.qContent(idx + 1)]?.length ?: 0
+        }
+        val slices = if (weights.any { it > 0 }) splitByWeight(main, weights)
+        else split(main, titles.size)
 
         val place = input.place.ifBlank { d.places.first() }
         val method = input.method.ifBlank { d.methods.first() }
@@ -83,6 +90,8 @@ object Generator {
                 title = one(Keys.qTitle(n), title),
                 minutes = minutes(Keys.qMinutes(n), slices[i]),
                 content = list(Keys.qContent(n), questionContent(i, titles.size, d, method)),
+                // Действия обучаемых у каждого вопроса свои: по первому слушают,
+                // по последнему выполняют приёмы. Общий набор сюда не годится.
                 trainee = list(Keys.qTrainee(n), traineeActions(i, titles.size))
             )
         }
@@ -93,7 +102,7 @@ object Generator {
                 trainee = list(Keys.INTRO_TRAINEE, it.trainee)
             )
         }
-        val outro = outroStage(outroMin).let {
+        val outro = outroStage(outroMin, input.disciplineId).let {
             it.copy(
                 content = list(Keys.OUTRO_CONTENT, it.content),
                 trainee = list(Keys.OUTRO_TRAINEE, it.trainee)
@@ -112,12 +121,19 @@ object Generator {
             dative = d.dative.ifBlank { Renderer.disciplineCase(d.name) },
             place = place,
             method = method,
-            goals = list(Keys.GOALS, buildGoals(d, ::t, topic)),
+            goals = list(Keys.GOALS, ownOr(d.id, Learned.Part.GOALS, topic, buildGoals(d, ::t, topic))),
             provision = list(
                 Keys.PROVISION,
-                (d.materials + d.references + attachedTitles(input.disciplineId)).distinct()
+                ownOr(
+                    d.id, Learned.Part.PROVISION, topic,
+                    (d.materials + d.references).distinct()
+                ).plus(attachedTitles(input.disciplineId)).distinct()
             ),
-            safety = list(Keys.SAFETY, if (input.includeSafety) d.safety else emptyList()),
+            safety = list(
+                Keys.SAFETY,
+                if (input.includeSafety) ownOr(d.id, Learned.Part.SAFETY, topic, d.safety)
+                else emptyList()
+            ),
             intro = intro,
             questions = questions,
             outro = outro,
@@ -127,6 +143,20 @@ object Generator {
     }
 
     /** Цели идут сплошным нумерованным списком: сначала учебные, последней — воспитательная. */
+    /**
+     * Выученное по предмету, если оно есть; иначе встроенные формулировки.
+     * В выученных строках стоит метка темы — подставляем тему этого занятия.
+     */
+    private fun ownOr(
+        disciplineId: String,
+        part: String,
+        topic: String,
+        fallback: List<String>
+    ): List<String> {
+        val own = Learned.get(disciplineId, part)
+        return if (own.isEmpty()) fallback else own.map { Learned.applyTopic(it, topic) }
+    }
+
     private fun buildGoals(
         d: ru.vzvod.konspekt.model.Discipline,
         t: (String) -> String,
@@ -154,6 +184,19 @@ object Generator {
     // --- ход занятия ---
 
     private fun introStage(minutes: Int, input: LessonInput, topic: String): Stage {
+        // Если по предмету уже писали — берём свои формулировки, а не общевойсковые.
+        val own = Learned.get(input.disciplineId, Learned.Part.INTRO)
+        if (own.isNotEmpty()) {
+            val ownTrainee = Learned.get(input.disciplineId, Learned.Part.INTRO_TRAINEE)
+                .map { Learned.applyTopic(it, topic) }
+                .ifEmpty { defaultIntroTrainee() }
+            return Stage(
+                "Вводная часть",
+                minutes,
+                own.map { Learned.applyTopic(it, topic) },
+                ownTrainee
+            )
+        }
         val content = mutableListOf(
             "Принимаю доклад заместителя командира взвода о готовности к занятию.",
             "Проверяю наличие личного состава, готовность к занятию, внешний вид и экипировку.",
@@ -163,13 +206,14 @@ object Generator {
         if (input.includeSafety) {
             content += "Довожу требования безопасности и порядок их выполнения, отмечаю в журнале под роспись."
         }
-        val trainee = listOf(
-            "Строятся в установленном месте, докладывают о наличии личного состава.",
-            "Слушают, записывают тему занятия и учебные вопросы.",
-            "Отвечают на контрольные вопросы по предыдущему занятию."
-        )
-        return Stage("Вводная часть", minutes, content, trainee)
+        return Stage("Вводная часть", minutes, content, defaultIntroTrainee())
     }
+
+    private fun defaultIntroTrainee() = listOf(
+        "Строятся в установленном месте, докладывают о наличии личного состава.",
+        "Слушают, записывают тему занятия и учебные вопросы.",
+        "Отвечают на контрольные вопросы по предыдущему занятию."
+    )
 
     private fun questionContent(
         i: Int,
@@ -216,7 +260,15 @@ object Generator {
         )
     }
 
-    private fun outroStage(minutes: Int) = Stage(
+    private fun outroStage(minutes: Int, disciplineId: String): Stage {
+        val own = Learned.get(disciplineId, Learned.Part.OUTRO)
+        if (own.isNotEmpty()) {
+            val trainee = Learned.get(disciplineId, Learned.Part.OUTRO_TRAINEE)
+                .ifEmpty { defaultOutroTrainee() }
+            // Заключительная часть темы не называет, подстановка не нужна.
+            return Stage("Заключительная часть", minutes, own, trainee)
+        }
+        return Stage(
         "Заключительная часть", minutes,
         listOf(
             "Напоминаю тему, учебные вопросы и цели занятия, указываю степень их достижения.",
@@ -225,10 +277,13 @@ object Generator {
             "Даю указания на подготовку к следующему занятию, указываю литературу.",
             "Проверяю наличие личного состава и материального обеспечения, организую сдачу имущества."
         ),
-        listOf(
-            "Слушают, задают вопросы, записывают литературу.",
-            "Сдают полученное имущество, приводят в порядок место занятия."
+        defaultOutroTrainee()
         )
+    }
+
+    private fun defaultOutroTrainee() = listOf(
+        "Слушают, задают вопросы, записывают литературу.",
+        "Сдают полученное имущество, приводят в порядок место занятия."
     )
 
     // --- раздатка ---
@@ -290,6 +345,37 @@ object Generator {
         }.filter { it.isNotEmpty() }
 
     /** Раскладывает минуты основной части по вопросам кратно 5, остаток — последнему. */
+    /**
+     * Делит время основной части по объёму содержания вопросов.
+     *
+     * Ровное деление врёт: на вопрос с двадцатью абзацами и на вопрос с тремя
+     * строками нельзя отводить поровну. Если содержание известно, время идёт
+     * пропорционально ему, но не меньше пяти минут на вопрос.
+     */
+    fun splitByWeight(main: Int, weights: List<Int>): List<Int> {
+        val n = weights.size
+        if (n <= 0) return emptyList()
+        val total = weights.sum()
+        if (total <= 0) return split(main, n)
+
+        val floor = 5
+        val free = main - floor * n
+        if (free <= 0) return split(main, n)
+
+        val result = MutableList(n) { floor }
+        var given = 0
+        weights.forEachIndexed { i, w ->
+            val add = ((free.toLong() * w) / total / 5 * 5).toInt()
+            result[i] += add
+            given += add
+        }
+        // Остаток от округления до пяти минут отдаём самому объёмному вопросу.
+        var rest = free - given
+        val biggest = weights.indices.maxByOrNull { weights[it] } ?: 0
+        if (rest > 0) result[biggest] += rest
+        return result
+    }
+
     fun split(main: Int, n: Int): List<Int> {
         if (n <= 0) return emptyList()
         val base = (main / n / 5) * 5

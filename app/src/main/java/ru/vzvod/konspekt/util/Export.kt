@@ -3,7 +3,6 @@ package ru.vzvod.konspekt.util
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
 import android.os.Build
 import android.print.PrintAttributes
 import android.print.PrintManager
@@ -13,25 +12,14 @@ import android.widget.Toast
 
 object Export {
 
-    /** WebView нужно удерживать до начала печати, иначе задание отменяется. */
-    private var printView: WebView? = null
-
+    /** Кладёт текст в буфер обмена — чтобы вставить в сообщение или заметку. */
     fun copy(context: Context, label: String, text: String) {
-        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        cm.setPrimaryClip(ClipData.newPlainText(label, text))
-        // На Android 13+ система сама показывает уведомление о копировании.
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+        // На Android 13 и новее система показывает своё уведомление о копировании.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             Toast.makeText(context, "Скопировано", Toast.LENGTH_SHORT).show()
         }
-    }
-
-    fun share(context: Context, subject: String, text: String) {
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, subject)
-            putExtra(Intent.EXTRA_TEXT, text)
-        }
-        context.startActivity(Intent.createChooser(intent, "Отправить конспект"))
     }
 
     /** Открывает системный диалог печати. Оттуда доступно «Сохранить в PDF».

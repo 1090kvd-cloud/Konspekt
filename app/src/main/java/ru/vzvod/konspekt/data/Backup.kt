@@ -14,7 +14,9 @@ import java.util.zip.ZipOutputStream
  */
 object Backup {
 
-    private val topLevel = listOf("konspekt.json", "library.json", "materials.json")
+    private val topLevel = listOf(
+        "konspekt.json", "library.json", "materials.json", "program.json", "learned.json"
+    )
     private const val MATERIALS = "materials/"
 
     fun write(context: Context, out: OutputStream): Result<Int> = runCatching {

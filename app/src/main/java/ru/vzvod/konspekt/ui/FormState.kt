@@ -54,7 +54,8 @@ class FormState(settings: Settings) {
         topic = topic.trim(),
         themeNo = themeNo.trim().ifBlank { "1" },
         lessonNo = lessonNo.trim().ifBlank { "1" },
-        lessonTitle = lessonTitle.trim(),
+        // Пустое наименование занятия — лишнее поле для заполнения: берём тему.
+        lessonTitle = lessonTitle.trim().ifBlank { topic.trim() },
         minutes = minutes,
         place = place.trim(),
         method = method.trim(),

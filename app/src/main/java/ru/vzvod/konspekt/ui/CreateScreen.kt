@@ -49,6 +49,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ru.vzvod.konspekt.data.Library
 import ru.vzvod.konspekt.data.Materials
+import ru.vzvod.konspekt.logic.AutoFill
+import ru.vzvod.konspekt.model.LessonInput
+import ru.vzvod.konspekt.data.Program
+import ru.vzvod.konspekt.model.ProgramItem
 import ru.vzvod.konspekt.model.Settings
 import ru.vzvod.konspekt.logic.Generator
 import java.text.SimpleDateFormat
@@ -61,9 +65,12 @@ import java.util.TimeZone
 fun CreateScreen(
     form: FormState,
     settings: Settings,
+    archive: List<LessonInput>,
     onBuild: () -> Unit,
+    busy: Boolean = false,
     onSeries: () -> Unit,
     onNew: () -> Unit,
+    onNext: (ProgramItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val discipline = Library.byId(form.disciplineId)
@@ -87,6 +94,38 @@ fun CreateScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
     ) {
+        // Программа знает, какое занятие следующее: вводить нечего.
+        val next = Program.next()
+        if (next != null) {
+            Section(
+                "Следующее по программе",
+                "Осталось занятий: ${Program.remaining()} · ${Program.remainingMinutes() / 45} ч"
+            ) {
+                Text(
+                    "ТЕМА ${next.themeNo}: ${next.topic}",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                if (next.lessonTitle.isNotBlank()) {
+                    Text(
+                        "ЗАНЯТИЕ ${next.lessonNo}: ${next.lessonTitle}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    "${Library.byId(next.disciplineId).name} · ${next.minutes} мин",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = { onNext(next) },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                ) { Text("Собрать это занятие") }
+            }
+        }
+
         Row(Modifier.padding(start = 8.dp, end = 8.dp, top = 2.dp)) {
             TextButton(onClick = onNew) { Text("Новое занятие") }
             TextButton(onClick = onSeries, enabled = form.topic.isNotBlank()) {
@@ -156,6 +195,28 @@ fun CreateScreen(
                 minLines = 2,
                 textStyle = MaterialTheme.typography.bodyLarge
             )
+            // Что уже писали по этому предмету — подставляется одним нажатием.
+            val hints = AutoFill.suggestTopics(archive, form.disciplineId, form.topic)
+            if (hints.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Уже было по этому предмету:",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                hints.forEach { h ->
+                    Text(
+                        h,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 2,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { form.topic = h }
+                            .padding(vertical = 8.dp)
+                    )
+                }
+            }
             if (discipline.topics.isNotEmpty()) {
                 TextButton(onClick = { pickTopic = true }) { Text("Выбрать типовую тему") }
             }
@@ -292,6 +353,14 @@ fun CreateScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Row {
+                        TextButton(onClick = {
+                            form.date = formatDate(System.currentTimeMillis())
+                        }) { Text("Сегодня") }
+                        TextButton(onClick = {
+                            form.date = formatDate(System.currentTimeMillis() + 86_400_000L)
+                        }) { Text("Завтра") }
+                    }
                     Spacer(Modifier.height(10.dp))
                     OutlinedTextField(
                         value = form.leader,
@@ -387,12 +456,15 @@ fun CreateScreen(
     ) {
         Button(
             onClick = onBuild,
-            enabled = form.topic.isNotBlank(),
+            enabled = form.topic.isNotBlank() && !busy,
             modifier = Modifier.fillMaxWidth().height(52.dp)
         ) {
             Text(
-                if (form.topic.isBlank()) "Введите тему занятия"
-                else "Собрать конспект",
+                when {
+                    busy -> "Собираю: ищу по методичкам…"
+                    form.topic.isBlank() -> "Введите тему занятия"
+                    else -> "Собрать конспект"
+                },
                 style = MaterialTheme.typography.titleMedium
             )
         }
@@ -413,7 +485,7 @@ fun CreateScreen(
             onDismissRequest = { pickDate = false },
             confirmButton = {
                 TextButton(onClick = {
-                    state.selectedDateMillis?.let { form.date = formatDate(it) }
+                    state.selectedDateMillis?.let { form.date = pickedDate(it) }
                     pickDate = false
                 }) { Text("Выбрать") }
             },
@@ -425,11 +497,15 @@ fun CreateScreen(
 }
 
 /** Календарь отдаёт полночь по UTC — форматируем в той же зоне, иначе съедет день. */
-private fun formatDate(millis: Long): String {
+private fun pickedDate(millis: Long): String {
     val fmt = SimpleDateFormat("d MMMM yyyy 'г.'", Locale("ru"))
     fmt.timeZone = TimeZone.getTimeZone("UTC")
     return fmt.format(Date(millis))
 }
+
+/** Сегодня и завтра берутся по часам телефона. */
+private fun formatDate(millis: Long): String =
+    SimpleDateFormat("d MMMM yyyy 'г.'", Locale("ru")).format(Date(millis))
 
 /** Живой расчёт: показывает, как время разложится по частям занятия. */
 private fun timeBreakdown(minutes: Int, questions: Int): String {

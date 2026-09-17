@@ -46,8 +46,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ru.vzvod.konspekt.data.LessonsJson
+import ru.vzvod.konspekt.data.Learned
 import ru.vzvod.konspekt.data.Library
 import ru.vzvod.konspekt.data.FileVault
+import ru.vzvod.konspekt.data.ShareLesson
+import ru.vzvod.konspekt.data.Program
 import ru.vzvod.konspekt.data.Sources
 import ru.vzvod.konspekt.logic.LessonImport
 import ru.vzvod.konspekt.logic.TextExtract
@@ -103,7 +106,15 @@ fun ArchiveScreen(
 
                         when (val t = TextExtract.fromUri(context, uri, name)) {
                             is TextExtract.Result.Unsupported -> notes.add("$name — ${t.reason}")
-                            is TextExtract.Result.Ok -> {
+                            is TextExtract.Result.Ok -> if (Program.looksLikeProgram(t.text)) {
+                                // В одном заходе можно выбрать и конспекты, и программу.
+                                runCatching { Program.decode(t.text) }
+                                    .onSuccess {
+                                        Program.replaceAll(context, it)
+                                        notes.add("$name — программа, занятий: ${it.size}")
+                                    }
+                                    .onFailure { notes.add("$name — ${it.message}") }
+                            } else {
                                 val out = LessonImport.parse(t.text, name)
                                 out.lesson?.let { lesson ->
                                     // Исходник храним рядом: его можно распечатать
@@ -269,6 +280,7 @@ fun ArchiveScreen(
                         onOpen = { onOpen(item) },
                         onEditConditions = { onEditConditions(item) },
                         onDuplicate = { onDuplicate(item) },
+                        onShare = { ShareLesson.send(context, listOf(item)) },
                         conducted = done,
                         onToggleConducted = { onToggleConducted(item) },
                         hasSource = item.sourceName.isNotBlank(),
@@ -370,6 +382,10 @@ fun SettingsScreen(
         }
 
         LibrarySection()
+
+        LearnedSection()
+
+        ProgramSection()
 
         BackupSection(onReload)
 
@@ -488,6 +504,7 @@ private fun ArchiveMenu(
     onOpen: () -> Unit,
     onEditConditions: () -> Unit,
     onDuplicate: () -> Unit,
+    onShare: () -> Unit,
     conducted: Boolean,
     onToggleConducted: () -> Unit,
     hasSource: Boolean,
@@ -508,6 +525,10 @@ private fun ArchiveMenu(
             DropdownMenuItem(
                 text = { Text(if (conducted) "Снять отметку" else "Отметить проведённым") },
                 onClick = { open = false; onToggleConducted() }
+            )
+            DropdownMenuItem(
+                text = { Text("Отправить товарищу") },
+                onClick = { open = false; onShare() }
             )
             DropdownMenuItem(
                 text = { Text("Сделать копию") },
@@ -634,5 +655,125 @@ private fun AboutSection() {
                 TextButton(onClick = { showLicense = false }) { Text("Закрыть") }
             }
         )
+    }
+}
+
+/**
+ * Программа боевой подготовки. Заводится один раз файлом, дальше приложение
+ * само знает, какое занятие следующее и сколько часов осталось.
+ */
+@Composable
+private fun ProgramSection() {
+    val context = LocalContext.current
+    var status by remember { mutableStateOf("") }
+
+    val loader = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            status = runCatching {
+                val text = context.contentResolver.openInputStream(uri)?.use {
+                    TextExtract.readAsText(it.readBytes())
+                } ?: throw Exception("Файл не читается")
+                val list = Program.decode(text)
+                Program.replaceAll(context, list)
+                "Загружено занятий: ${list.size}"
+            }.getOrElse { it.message ?: "Файл не подошёл" }
+        }
+    }
+
+    val saver = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            status = runCatching {
+                context.contentResolver.openOutputStream(uri)?.use {
+                    it.write(Program.encode(Program.items.toList()).toByteArray())
+                }
+                "Программа сохранена в файл"
+            }.getOrElse { "Не удалось сохранить" }
+        }
+    }
+
+    val total = Program.total()
+    val left = Program.remaining()
+
+    Section(
+        "Программа подготовки",
+        if (total == 0) "Не заведена"
+        else "Занятий: $total · осталось $left · ${Program.remainingMinutes() / 45} ч"
+    ) {
+        Text(
+            "Перечень занятий на период обучения. Когда он заведён, конспект " +
+                "собирается одной кнопкой: тема, номер занятия и часы берутся отсюда, " +
+                "а отметка «проведено» в архиве закрывает пункт.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(6.dp))
+        Row {
+            TextButton(onClick = {
+                loader.launch(arrayOf("application/json", "text/plain", "*/*"))
+            }) { Text("Загрузить файл") }
+            if (total > 0) {
+                TextButton(onClick = { saver.launch("programma.json") }) { Text("Сохранить") }
+            }
+        }
+        if (total > 0) {
+            TextButton(onClick = {
+                Program.clear(context)
+                status = "Программа очищена"
+            }) { Text("Очистить программу") }
+        }
+        if (status.isNotBlank()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                status,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.tertiary
+            )
+        }
+    }
+}
+
+/** Что приложение переняло из ваших конспектов. */
+@Composable
+private fun LearnedSection() {
+    val context = LocalContext.current
+    val total = Learned.total()
+    Section(
+        "Выученные формулировки",
+        if (total == 0) "Пока ничего — приложение пишет общевойсковым языком"
+        else "Запомнено строк: $total"
+    ) {
+        Text(
+            "Приложение перенимает то, как пишете вы: цели, действия во вводной " +
+                "и заключительной частях, действия обучаемых, требования безопасности. " +
+                "Берутся из загруженных конспектов и из ваших правок, и подставляются " +
+                "вместо шаблонных — по каждому предмету отдельно.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (total > 0) {
+            Spacer(Modifier.height(6.dp))
+            Library.all.forEach { d ->
+                val n = Learned.count(d.id)
+                if (n > 0) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "${d.short}: $n",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = { Learned.forget(context, d.id) }) {
+                            Text("Забыть")
+                        }
+                    }
+                }
+            }
+        }
     }
 }

@@ -116,6 +116,22 @@ data class Material(
     val addedAt: Long
 )
 
+/**
+ * Пункт программы боевой подготовки: одно занятие, которое положено провести.
+ * Из него собирается конспект без единого ввода — всё уже известно заранее.
+ */
+data class ProgramItem(
+    val id: String,
+    val disciplineId: String,
+    val themeNo: String = "1",
+    val topic: String,
+    val lessonNo: String = "1",
+    val lessonTitle: String = "",
+    val minutes: Int = 90,
+    /** id проведённого занятия из архива. Пусто — ещё предстоит. */
+    val doneBy: String = ""
+)
+
 /** Настройки: подставляются в шапку каждого документа. */
 data class Settings(
     val leader: String = "",
