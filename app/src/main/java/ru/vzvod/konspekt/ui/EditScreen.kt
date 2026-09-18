@@ -76,6 +76,9 @@ fun EditScreen(
     var outroContent by remember(input.id) { mutableStateOf(plan.outro.content.join()) }
     var outroTrainee by remember(input.id) { mutableStateOf(plan.outro.trainee.join()) }
     var control by remember(input.id) { mutableStateOf(plan.control.join()) }
+    var totalMinutes by remember(input.id) { mutableStateOf(input.minutes.toString()) }
+    var introMinutes by remember(input.id) { mutableStateOf(plan.intro.minutes.toString()) }
+    var outroMinutes by remember(input.id) { mutableStateOf(plan.outro.minutes.toString()) }
 
     val questions = remember(input.id) {
         mutableStateListOf<QuestionDraft>().apply {
@@ -109,8 +112,8 @@ fun EditScreen(
         put(Generator.Keys.OUTRO_CONTENT, outroContent, raw.outro.content)
         put(Generator.Keys.OUTRO_TRAINEE, outroTrainee, raw.outro.trainee)
         put(Generator.Keys.CONTROL, control, raw.control)
-        edits[Generator.Keys.INTRO_MIN] = plan.intro.minutes.toString()
-        edits[Generator.Keys.OUTRO_MIN] = plan.outro.minutes.toString()
+        edits[Generator.Keys.INTRO_MIN] = minutesOf(introMinutes, plan.intro.minutes)
+        edits[Generator.Keys.OUTRO_MIN] = minutesOf(outroMinutes, plan.outro.minutes)
 
         questions.forEachIndexed { i, q ->
             val n = i + 1
@@ -121,6 +124,7 @@ fun EditScreen(
         }
 
         return input.copy(
+            minutes = totalMinutes.trim().toIntOrNull()?.coerceIn(1, 600) ?: input.minutes,
             questionCount = questions.size.coerceIn(1, 6),
             customQuestions = questions.map { it.title.trim() }.filter { it.isNotEmpty() },
             edits = edits
@@ -161,6 +165,30 @@ fun EditScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
+            // Время правится здесь же: после сборки часто выясняется,
+            // что на вопрос нужно не десять минут, а двенадцать.
+            Section("Время занятия", "Любое число минут, не обязательно кратное пяти") {
+                Row {
+                    MinutesField("Всего", totalMinutes) { totalMinutes = it }
+                    Spacer(Modifier.width(10.dp))
+                    MinutesField("Вводная", introMinutes) { introMinutes = it }
+                    Spacer(Modifier.width(10.dp))
+                    MinutesField("Заключит.", outroMinutes) { outroMinutes = it }
+                }
+                val sum = (introMinutes.toIntOrNull() ?: 0) +
+                    (outroMinutes.toIntOrNull() ?: 0) +
+                    questions.sumOf { it.minutes.toIntOrNull() ?: 0 }
+                val total = totalMinutes.toIntOrNull() ?: 0
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    if (sum == total) "По частям: $sum мин — сходится"
+                    else "По частям: $sum мин, в шапке: $total мин — не сходится",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (sum == total) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.error
+                )
+            }
+
             Section("Цели занятия", "Нумерация проставится сама") {
                 Field(goals) { goals = it }
                 ResetLink(goals, raw.goals.join()) { goals = raw.goals.join() }
@@ -479,3 +507,18 @@ private fun MaterialsPickDialog(
 }
 
 private fun List<String>.join() = joinToString("\n")
+
+/** Поле для минут: принимает любое число, не только кратное пяти. */
+@Composable
+private fun MinutesField(label: String, value: String, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { v -> onChange(v.filter { it.isDigit() }.take(3)) },
+        label = { Text(label) },
+        singleLine = true,
+        modifier = Modifier.width(104.dp)
+    )
+}
+
+private fun minutesOf(text: String, fallback: Int): String =
+    (text.trim().toIntOrNull()?.coerceIn(1, 600) ?: fallback).toString()

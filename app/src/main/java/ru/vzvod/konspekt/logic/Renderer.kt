@@ -19,6 +19,10 @@ object Renderer {
         return "План-конспект_$safe"
     }
 
+    /** Дата в шапке: введённая руководителем, иначе пустая линейка под запись. */
+    private fun dateOf(plan: LessonPlan): String =
+        plan.input.date.ifBlank { "«___» __________ 20___ г." }
+
     /** Время в шапке: своя запись руководителя, иначе — расчётная. */
     fun timeOf(plan: LessonPlan): String =
         plan.input.timeLabel.ifBlank { Generator.timeText(plan.input.minutes) }
@@ -49,7 +53,7 @@ object Renderer {
         appendLine("ЦЕЛИ:")
         plan.goals.forEachIndexed { k, g -> appendLine("${k + 1}. ${unnumbered(g)}") }
         appendLine()
-        appendLine("Время: ${timeOf(plan)};    «____» ____________ 20____ г.")
+        appendLine("Время: ${timeOf(plan)};    ${dateOf(plan)}")
         appendLine("Место: ${plan.place}.")
         appendLine("Материальное обеспечение: ${plan.provision.joinToString(", ")}.")
         if (plan.safety.isNotEmpty()) {
@@ -194,7 +198,7 @@ object Renderer {
             sb.append("<p style=\"text-indent:1.25cm\">${k + 1}. ${esc(unnumbered(g))}</p>")
         }
 
-        sb.append("<p style=\"text-indent:1.25cm\"><span class=\"key\">Время:</span> ${timeOf(plan)};&nbsp;&nbsp;&nbsp;&nbsp;«___» __________ 20___ г.</p>")
+        sb.append("<p style=\"text-indent:1.25cm\"><span class=\"key\">Время:</span> ${timeOf(plan)};&nbsp;&nbsp;&nbsp;&nbsp;${esc(dateOf(plan))}</p>")
         sb.append("<p style=\"text-indent:1.25cm\"><span class=\"key\">Место:</span> ${esc(plan.place)}.</p>")
         sb.append("<p style=\"text-indent:1.25cm\"><span class=\"key\">Материальное обеспечение:</span> ${esc(plan.provision.joinToString(", "))}.</p>")
         if (plan.safety.isNotEmpty()) {

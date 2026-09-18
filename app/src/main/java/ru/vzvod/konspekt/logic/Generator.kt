@@ -365,7 +365,9 @@ object Generator {
         val result = MutableList(n) { floor }
         var given = 0
         weights.forEachIndexed { i, w ->
-            val add = ((free.toLong() * w) / total / 5 * 5).toInt()
+            // Без округления до пяти: пользователь вправе задать любое число минут,
+            // и расчётное деление не должно навязывать кратность.
+            val add = ((free.toLong() * w) / total).toInt()
             result[i] += add
             given += add
         }

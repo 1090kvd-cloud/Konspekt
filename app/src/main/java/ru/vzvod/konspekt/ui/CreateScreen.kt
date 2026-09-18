@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -46,6 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import ru.vzvod.konspekt.data.Library
 import ru.vzvod.konspekt.data.Materials
@@ -258,6 +260,20 @@ fun CreateScreen(
                     range = 15..360,
                     step = 5,
                     suffix = " мин"
+                )
+                Spacer(Modifier.height(8.dp))
+                // Кнопки шагают по пять минут, а поле принимает любое число:
+                // расписание не всегда кратно пяти.
+                OutlinedTextField(
+                    value = form.minutes.toString(),
+                    onValueChange = { v ->
+                        v.filter { it.isDigit() }.take(3).toIntOrNull()
+                            ?.let { form.minutes = it.coerceIn(1, 600) }
+                    },
+                    label = { Text("Точно, минут") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.width(150.dp)
                 )
             }
         }
