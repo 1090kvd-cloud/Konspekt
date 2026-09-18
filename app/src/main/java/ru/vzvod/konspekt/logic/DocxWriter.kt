@@ -1,7 +1,10 @@
 package ru.vzvod.konspekt.logic
 
+import android.content.Context
+import android.graphics.BitmapFactory
 import ru.vzvod.konspekt.model.LessonPlan
 import ru.vzvod.konspekt.model.Settings
+import java.io.File
 import java.io.OutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -14,13 +17,102 @@ import java.util.zip.ZipOutputStream
  */
 object DocxWriter {
 
-    fun write(out: OutputStream, plan: LessonPlan, s: Settings) {
+    /** Рисунки, попавшие в документ: имя файла -> номер связи внутри docx. */
+    private val used = LinkedHashMap<String, String>()
+    private var imageDir: File? = null
+
+    fun write(out: OutputStream, plan: LessonPlan, s: Settings, context: Context? = null) {
+        used.clear()
+        imageDir = context?.let { DocxImages.dir(it) }
+        // Тело собираем первым: по ходу становится известно, какие рисунки нужны.
+        val body = document(plan, s)
         ZipOutputStream(out).use { zip ->
-            put(zip, "[Content_Types].xml", CONTENT_TYPES)
+            put(zip, "[Content_Types].xml", contentTypes())
             put(zip, "_rels/.rels", RELS)
-            put(zip, "word/_rels/document.xml.rels", DOC_RELS)
-            put(zip, "word/document.xml", document(plan, s))
+            put(zip, "word/_rels/document.xml.rels", docRels())
+            put(zip, "word/document.xml", body)
+            used.keys.forEach { name ->
+                val f = File(imageDir, name)
+                if (f.exists()) {
+                    zip.putNextEntry(ZipEntry("word/media/$name"))
+                    f.inputStream().use { it.copyTo(zip) }
+                    zip.closeEntry()
+                }
+            }
         }
+        used.clear()
+        imageDir = null
+    }
+
+    private fun contentTypes(): String {
+        val exts = used.keys.map { it.substringAfterLast('.', "png").lowercase() }.toSet()
+        val defaults = exts.joinToString("") { e ->
+            val mime = when (e) {
+                "jpg", "jpeg" -> "image/jpeg"
+                "gif" -> "image/gif"
+                "bmp" -> "image/bmp"
+                "webp" -> "image/webp"
+                else -> "image/png"
+            }
+            "<Default Extension=\"$e\" ContentType=\"$mime\"/>"
+        }
+        return CONTENT_TYPES.replace("<!--images-->", defaults)
+    }
+
+    private fun docRels(): String {
+        val rels = used.entries.joinToString("") { (name, rid) ->
+            "<Relationship Id=\"$rid\" Type=\"http://schemas.openxmlformats.org/officeDocument/" +
+                "2006/relationships/image\" Target=\"media/$name\"/>"
+        }
+        return DOC_RELS.replace("<!--rels-->", rels)
+    }
+
+    /**
+     * Рисунок внутри ячейки таблицы: ширину берём по графе содержания,
+     * высоту — по пропорциям самого файла.
+     */
+    private fun image(name: String): String {
+        val dir = imageDir ?: return p("[рисунок]")
+        val f = File(dir, name)
+        if (!f.exists()) return p("[рисунок]")
+
+        val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(f.absolutePath, opts)
+        val w = opts.outWidth.takeIf { it > 0 } ?: 600
+        val h = opts.outHeight.takeIf { it > 0 } ?: 400
+
+        val maxW = 3_600_000L          // 10 см — ширина графы содержания
+        val maxH = 5_400_000L          // 15 см, чтобы схема не заняла лист целиком
+        var cx = maxW
+        var cy = cx * h / w
+        if (cy > maxH) {
+            cy = maxH
+            cx = cy * w / h
+        }
+
+        val rid = used.getOrPut(name) { "rIdImg${used.size + 1}" }
+        val id = used.size
+        return "<w:p><w:pPr><w:jc w:val=\"center\"/><w:spacing w:after=\"0\"/></w:pPr><w:r><w:drawing>" +
+            "<wp:inline xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" " +
+            "distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\">" +
+            "<wp:extent cx=\"$cx\" cy=\"$cy\"/>" +
+            "<wp:docPr id=\"$id\" name=\"Рисунок $id\"/>" +
+            "<a:graphic xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\">" +
+            "<a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">" +
+            "<pic:pic xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">" +
+            "<pic:nvPicPr><pic:cNvPr id=\"$id\" name=\"$name\"/><pic:cNvPicPr/></pic:nvPicPr>" +
+            "<pic:blipFill>" +
+            "<a:blip xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" " +
+            "r:embed=\"$rid\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>" +
+            "<pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"$cx\" cy=\"$cy\"/></a:xfrm>" +
+            "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr>" +
+            "</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"
+    }
+
+    /** Строка текста или рисунок — решает метка. */
+    private fun line(text: String, size: Int = 22): String {
+        val img = DocxImages.nameIn(text)
+        return if (img != null) image(img) else p(text, size = size)
     }
 
     private fun put(zip: ZipOutputStream, name: String, body: String) {
@@ -81,7 +173,9 @@ object DocxWriter {
     }
 
     private fun bullets(items: List<String>): String =
-        if (items.isEmpty()) p("") else items.joinToString("") { p("— $it", size = 22) }
+        if (items.isEmpty()) p("") else items.joinToString("") {
+            if (DocxImages.hasMarker(it)) line(it) else p("— $it", size = 22)
+        }
 
     private fun document(plan: LessonPlan, s: Settings): String {
         val i = plan.input
@@ -142,7 +236,7 @@ object DocxWriter {
             body.append("<w:tr>")
             body.append(cell(300, p(no, size = 22)))
             body.append(cell(900, p(head, bold = true, size = 22) + p("$minutes мин.", size = 20)))
-            body.append(cell(2900, content.joinToString("") { p(it, size = 22) }))
+            body.append(cell(2900, content.joinToString("") { line(it) }))
             body.append(cell(900, trainee.joinToString("") { p(it, size = 20) }))
             body.append("</w:tr>")
         }
@@ -170,7 +264,7 @@ object DocxWriter {
             body.append(p("РАЗДАТОЧНЫЙ МАТЕРИАЛ", bold = true, align = "center"))
             plan.handout.forEach { b ->
                 body.append(p(b.title, bold = true))
-                b.items.forEach { body.append(p(it, size = 22)) }
+                b.items.forEach { body.append(line(it)) }
             }
         }
         if (plan.control.isNotEmpty()) {
@@ -211,7 +305,7 @@ object DocxWriter {
     private const val CONTENT_TYPES = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
 <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-<Default Extension="xml" ContentType="application/xml"/>
+<Default Extension="xml" ContentType="application/xml"/><!--images-->
 <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 </Types>"""
 
@@ -221,5 +315,5 @@ object DocxWriter {
 </Relationships>"""
 
     private const val DOC_RELS = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>"""
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><!--rels--></Relationships>"""
 }

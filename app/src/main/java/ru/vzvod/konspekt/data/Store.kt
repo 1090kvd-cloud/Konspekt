@@ -74,6 +74,7 @@ class Store(private val context: Context) {
         archive.firstOrNull { it.id == id }?.sourceName?.let { Sources.remove(context, it) }
         archive.removeAll { it.id == id }
         persist()
+        cleanupImages()
     }
 
     fun clearArchive() {
@@ -84,6 +85,15 @@ class Store(private val context: Context) {
 
     /** Перечитать всё с диска — после восстановления из резервной копии. */
     fun reload() = load()
+
+    /** Рисунки, на которые не ссылается ни одно занятие, больше не нужны. */
+    private fun cleanupImages() {
+        val used = HashSet<String>()
+        (archive + listOfNotNull(draft)).forEach { item ->
+            used += ru.vzvod.konspekt.logic.DocxImages.namesIn(item.edits.values)
+        }
+        ru.vzvod.konspekt.logic.DocxImages.cleanup(context, used)
+    }
 
     private fun load() {
         runCatching {

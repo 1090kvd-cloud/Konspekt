@@ -52,7 +52,7 @@ object TextExtract {
                 "txt", "md", "csv", "log" -> Result.Ok(readAsText(source.readBytes()))
                 "html", "htm", "xhtml" -> Result.Ok(stripTags(readAsText(source.readBytes())))
                 "doc" -> readDoc(source)
-                "docx" -> readDocx(source)
+                "docx" -> readDocx(source, context)
                 "rtf" -> Result.Ok(readRtf(readAsText(source.readBytes())))
                 "pdf" -> Result.Unsupported(
                     "PDF приложение не читает. Приложите методичку в .docx или .txt"
@@ -110,8 +110,9 @@ object TextExtract {
     const val CELL = "\u0001"
     const val ROW = "\u0002"
 
-    private fun readDocx(file: File): Result {
-        val xml = plainDocx(file)
+    private fun readDocx(file: File, context: Context?): Result {
+        // Если есть куда сохранить рисунки — берём разметку с метками вместо картинок.
+        val xml = (context?.let { DocxImages.extract(it, file) }) ?: plainDocx(file)
             ?: return Result.Unsupported("Внутри .docx нет текстовой части")
         val withBreaks = xml
             .replace(Regex("<w:tab[^>]*/>"), " ")

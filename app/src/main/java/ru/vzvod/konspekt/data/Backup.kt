@@ -18,6 +18,7 @@ object Backup {
         "konspekt.json", "library.json", "materials.json", "program.json", "learned.json"
     )
     private const val MATERIALS = "materials/"
+    private const val IMAGES = "lessonimg/"
 
     fun write(context: Context, out: OutputStream): Result<Int> = runCatching {
         var count = 0
@@ -31,13 +32,14 @@ object Backup {
                     count++
                 }
             }
-            val dir = File(context.filesDir, "materials")
-            dir.listFiles()?.forEach { f ->
-                if (f.isFile) {
-                    zip.putNextEntry(ZipEntry(MATERIALS + f.name))
-                    f.inputStream().use { it.copyTo(zip) }
-                    zip.closeEntry()
-                    count++
+            listOf("materials" to MATERIALS, "lessonimg" to IMAGES).forEach { (folder, prefix) ->
+                File(context.filesDir, folder).listFiles()?.forEach { f ->
+                    if (f.isFile) {
+                        zip.putNextEntry(ZipEntry(prefix + f.name))
+                        f.inputStream().use { it.copyTo(zip) }
+                        zip.closeEntry()
+                        count++
+                    }
                 }
             }
         }
@@ -55,6 +57,9 @@ object Backup {
                     name.startsWith(MATERIALS) && !name.contains("..") && name.length > MATERIALS.length ->
                         File(context.filesDir, "materials").apply { mkdirs() }
                             .let { File(it, name.substring(MATERIALS.length)) }
+                    name.startsWith(IMAGES) && !name.contains("..") && name.length > IMAGES.length ->
+                        File(context.filesDir, "lessonimg").apply { mkdirs() }
+                            .let { File(it, name.substring(IMAGES.length)) }
                     else -> null
                 }
                 if (target != null && !entry.isDirectory) {

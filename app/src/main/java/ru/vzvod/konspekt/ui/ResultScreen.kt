@@ -59,6 +59,7 @@ import ru.vzvod.konspekt.data.Materials
 import ru.vzvod.konspekt.data.ShareLesson
 import ru.vzvod.konspekt.data.Sources
 import ru.vzvod.konspekt.logic.DocxRewrite
+import ru.vzvod.konspekt.logic.DocxImages
 import ru.vzvod.konspekt.logic.DocxWriter
 import ru.vzvod.konspekt.logic.Renderer
 import ru.vzvod.konspekt.logic.Review
@@ -89,7 +90,9 @@ fun ResultScreen(
         if (plan.control.isNotEmpty()) add("Вопросы")
     }
 
-    val currentText: () -> String = { rawText(plan, settings, tabs.getOrNull(tab)) }
+    val currentText: () -> String = {
+        DocxImages.stripMarkers(rawText(plan, settings, tabs.getOrNull(tab)))
+    }
 
 
 
@@ -107,7 +110,7 @@ fun ResultScreen(
                     // правим его копию, а не собираем документ заново.
                     val done = source != null &&
                         DocxRewrite.rewrite(source, out, plan, settings).ok
-                    if (!done) DocxWriter.write(out, plan, settings)
+                    if (!done) DocxWriter.write(out, plan, settings, context)
                 }
             }
         }
@@ -201,6 +204,7 @@ fun ResultScreen(
                         saveLauncher.launch(Renderer.fileName(plan) + ".docx")
                     }
                     ActionButton(Icons.Filled.Print, "PDF") {
+                        Renderer.imageDir = DocxImages.dir(context)
                         Export.printPdf(
                             context,
                             Renderer.fileName(plan),

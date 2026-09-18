@@ -37,6 +37,9 @@ object LessonImport {
         "проверка готовности"
     )
 
+    /** Метка рисунка — не шум: она держит место схемы в тексте. */
+    private fun isPicture(line: String) = DocxImages.hasMarker(line)
+
     private fun isNoise(line: String) = noise.any { it.matches(line.trim()) } ||
         signMark.containsMatchIn(line)
 
@@ -51,6 +54,7 @@ object LessonImport {
         val trainee = ArrayList<String>()
         lines.forEach { l ->
             when {
+                isPicture(l) -> content.add(l)
                 isNoise(l) -> Unit
                 isTrainee(l) -> if (!trainee.contains(l)) trainee.add(l)
                 else -> content.add(l)
