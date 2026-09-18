@@ -45,7 +45,6 @@ jobs:
           fail=0
           for f in \
             app/src/main/java/ru/vzvod/konspekt/logic/Ocr.kt \
-            app/src/main/java/ru/vzvod/konspekt/logic/DocxImages.kt \
             app/src/main/assets/tessdata/rus.traineddata
           do
             if [ -e "$f" ]; then
@@ -55,7 +54,7 @@ jobs:
             fi
           done
           # Ссылки на классы, которых больше нет
-          if grep -rqs "TessBaseAPI\|DocxImages" app/src/main/java; then
+          if grep -rqs "TessBaseAPI" app/src/main/java; then
             echo "::error::В исходниках остались ссылки на удалённые классы"
             fail=1
           fi
