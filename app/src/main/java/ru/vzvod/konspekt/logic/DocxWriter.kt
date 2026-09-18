@@ -52,6 +52,8 @@ object DocxWriter {
                 "gif" -> "image/gif"
                 "bmp" -> "image/bmp"
                 "webp" -> "image/webp"
+                "emf" -> "image/x-emf"
+                "wmf" -> "image/x-wmf"
                 else -> "image/png"
             }
             "<Default Extension=\"$e\" ContentType=\"$mime\"/>"
@@ -76,10 +78,7 @@ object DocxWriter {
         val f = File(dir, name)
         if (!f.exists()) return p("[рисунок]")
 
-        val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(f.absolutePath, opts)
-        val w = opts.outWidth.takeIf { it > 0 } ?: 600
-        val h = opts.outHeight.takeIf { it > 0 } ?: 400
+        val (w, h) = sizeOf(f, name)
 
         val maxW = 3_600_000L          // 10 см — ширина графы содержания
         val maxH = 5_400_000L          // 15 см, чтобы схема не заняла лист целиком
@@ -107,6 +106,34 @@ object DocxWriter {
             "<pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"$cx\" cy=\"$cy\"/></a:xfrm>" +
             "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr>" +
             "</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"
+    }
+
+    /**
+     * Размеры рисунка. У растровых их читает система, у векторных берём
+     * из заголовка файла: в EMF первая запись хранит рамку в сотых долях
+     * миллиметра. Не прочиталось — ставим разумные по умолчанию.
+     */
+    private fun sizeOf(f: File, name: String): Pair<Int, Int> {
+        if (!DocxImages.isVector(name)) {
+            val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(f.absolutePath, opts)
+            return (opts.outWidth.takeIf { it > 0 } ?: 600) to
+                (opts.outHeight.takeIf { it > 0 } ?: 400)
+        }
+        return runCatching {
+            val head = ByteArray(40)
+            f.inputStream().use { it.read(head) }
+            fun int32(at: Int): Int =
+                (head[at].toInt() and 0xFF) or
+                    ((head[at + 1].toInt() and 0xFF) shl 8) or
+                    ((head[at + 2].toInt() and 0xFF) shl 16) or
+                    (head[at + 3].toInt() shl 24)
+            // rclFrame: left, top, right, bottom — сотые доли миллиметра.
+            val wMm = (int32(32) - int32(24)) / 100.0
+            val hMm = (int32(36) - int32(28)) / 100.0
+            if (wMm > 1 && hMm > 1) (wMm * 10).toInt() to (hMm * 10).toInt()
+            else 1000 to 700
+        }.getOrDefault(1000 to 700)
     }
 
     /** Строка текста или рисунок — решает метка. */

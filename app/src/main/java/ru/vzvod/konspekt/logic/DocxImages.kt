@@ -23,8 +23,19 @@ object DocxImages {
     private val embed = Regex("r:(?:embed|id)=\"(rId\\d+)\"")
     private val relation = Regex("<Relationship[^>]*Id=\"(rId\\d+)\"[^>]*Target=\"([^\"]+)\"[^>]*/?>")
 
-    /** Форматы, которые Android умеет показать. Векторные emf/wmf пропускаем. */
-    private val supported = listOf("png", "jpg", "jpeg", "gif", "bmp", "webp")
+    /** Растровые: их видно и в приложении, и в документе. */
+    private val raster = listOf("png", "jpg", "jpeg", "gif", "bmp", "webp")
+
+    /**
+     * Векторные схемы. Android их не рисует, но для документа это неважно:
+     * файл просто переносится в новый .docx, а отрисовывает его Word.
+     * В приложении на их месте стоит подпись.
+     */
+    private val vector = listOf("emf", "wmf")
+
+    private val supported = raster + vector
+
+    fun isVector(name: String) = name.substringAfterLast('.', "").lowercase() in vector
 
     fun dir(context: Context): File =
         File(context.filesDir, "lessonimg").apply { if (!exists()) mkdirs() }

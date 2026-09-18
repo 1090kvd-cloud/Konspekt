@@ -223,7 +223,20 @@ object LessonImport {
 
         fun flush() {
             val acc = current ?: return
-            val part = Part(acc.head, acc.body.toString().trim(), acc.minutes, acc.trainee.toString().trim())
+            var content = acc.body.toString().trim()
+                // «ОСНОВНАЯ ЧАСТЬ» в начале — это название графы, а не содержание.
+                .replace(Regex("^(вводная|основная|заключительная)\\s+часть:?\\s*",
+                    RegexOption.IGNORE_CASE), "")
+                .trim()
+            var trainee = acc.trainee.toString().trim()
+            // В части форм графа «Действия руководителя» несёт и само содержание,
+            // а в графе вопросов стоит только название части. Тогда меняем местами,
+            // иначе текст занятия ушёл бы в действия обучаемых и потерялся.
+            if (content.length < 40 && trainee.length > 80) {
+                content = trainee
+                trainee = ""
+            }
+            val part = Part(acc.head, content, acc.minutes, trainee)
             when (stage) {
                 "intro" -> if (intro == null) intro = part
                 "outro" -> outro = part

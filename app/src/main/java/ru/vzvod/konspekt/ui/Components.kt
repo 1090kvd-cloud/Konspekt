@@ -382,7 +382,9 @@ fun LessonImage(name: String) {
     }
     if (bitmap == null) {
         Text(
-            "[рисунок не найден]",
+            if (ru.vzvod.konspekt.logic.DocxImages.isVector(name))
+                "[схема из исходного конспекта — попадёт в Word]"
+            else "[рисунок не найден]",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

@@ -182,6 +182,9 @@ object Renderer {
     var imageDir: java.io.File? = null
 
     private fun img(name: String): String {
+        // Векторные схемы браузер печати не рисует — в PDF идёт подпись,
+        // а в файле Word схема остаётся настоящей.
+        if (DocxImages.isVector(name)) return "<li>[схема — см. документ Word]</li>"
         val dir = imageDir ?: return "<li>[рисунок]</li>"
         val f = java.io.File(dir, name)
         if (!f.exists()) return "<li>[рисунок]</li>"
