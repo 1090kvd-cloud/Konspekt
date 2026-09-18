@@ -265,9 +265,6 @@ object Renderer {
             sb.append("<p style=\"margin-top:10px\"><span class=\"key\">Примечания руководителя:</span> ${esc(i.note)}</p>")
         }
 
-        sb.append("<div class=\"sign\">Руководитель занятия<br>${esc(i.leader.ifBlank { s.leader })}")
-        sb.append("<div class=\"line\" style=\"width:60%;margin:14px auto\"></div></div>")
-
         if (plan.handout.isNotEmpty()) {
             sb.append("<div class=\"page\"></div><h1>РАЗДАТОЧНЫЙ МАТЕРИАЛ</h1>")
             sb.append("<p><span class=\"key\">Тема:</span> ${esc(i.topic)}</p>")
@@ -282,6 +279,9 @@ object Renderer {
             sb.append("</ol>")
             sb.append("<p><span class=\"key\">Критерии оценки.</span> «5» — полный правильный ответ; «4» — несущественные неточности; «3» — ответ после наводящих вопросов; «2» — материал не усвоен.</p>")
         }
+        // Подпись руководителя — последней, после раздатки и контрольных вопросов.
+        sb.append("<div class=\"sign\">Руководитель занятия<br>${esc(i.leader.ifBlank { s.leader })}")
+        sb.append("<div class=\"line\" style=\"width:60%;margin:14px auto\"></div></div>")
         sb.append("</body></html>")
         return sb.toString()
     }

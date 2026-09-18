@@ -355,6 +355,9 @@ fun CreateScreen(
                         placeholder = {
                             Text(settings.unitName.ifBlank { "личным составом 1 мсв" })
                         },
+                        supportingText = {
+                            Text("Встанет в строку «проведения занятия … с …»")
+                        },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(10.dp))

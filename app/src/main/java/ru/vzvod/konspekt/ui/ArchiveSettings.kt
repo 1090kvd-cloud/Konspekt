@@ -344,6 +344,7 @@ fun SettingsScreen(
                 value = settings.unitName,
                 onValueChange = { onChange(settings.copy(unitName = it)) },
                 label = { Text("Подразделение") },
+                supportingText = { Text("Например: личным составом 1 мсв") },
                 placeholder = { Text("1 мсв 2 мср") },
                 modifier = Modifier.fillMaxWidth()
             )

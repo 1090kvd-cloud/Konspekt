@@ -165,10 +165,6 @@ object DocxWriter {
             body.append(keyValue("Примечания:", i.note))
         }
 
-        body.append(p(""))
-        body.append(p("Руководитель занятия", align = "center"))
-        body.append(p(i.leader.ifBlank { s.leader }.ifBlank { "________________________" }, align = "center"))
-
         if (plan.handout.isNotEmpty()) {
             body.append(pageBreak())
             body.append(p("РАЗДАТОЧНЫЙ МАТЕРИАЛ", bold = true, align = "center"))
@@ -182,6 +178,16 @@ object DocxWriter {
             body.append(p("КОНТРОЛЬНЫЕ ВОПРОСЫ", bold = true, align = "center"))
             plan.control.forEachIndexed { n, q -> body.append(p("${n + 1}. $q", ind = 709)) }
         }
+
+        // Подпись руководителя — последней строкой документа, после всех приложений.
+        body.append(p(""))
+        body.append(p("Руководитель занятия", align = "center"))
+        body.append(
+            p(
+                i.leader.ifBlank { s.leader }.ifBlank { "________________________" },
+                align = "center"
+            )
+        )
 
         return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
