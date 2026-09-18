@@ -119,6 +119,11 @@ object TextExtract {
             .replace(Regex("</w:p>"), "\n")
             .replace(Regex("</w:tc>"), CELL)
             .replace(Regex("</w:tr>"), ROW + "\n")
+            // Word дробит текст посреди слова: «К» и «омандир» лежат в разных
+            // кусках. Между ними тег убираем начисто, иначе слова и числа рвутся.
+            .replace(Regex("</w:t>\\s*</w:r>\\s*<w:r[^>]*>(?:<w:rPr>.*?</w:rPr>)?<w:t[^>]*>",
+                RegexOption.DOT_MATCHES_ALL), "")
+            .replace(Regex("</w:t>\\s*<w:t[^>]*>"), "")
         return Result.Ok(stripTags(withBreaks))
     }
 

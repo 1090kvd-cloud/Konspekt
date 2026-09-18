@@ -22,6 +22,9 @@ private val PaperCard = Color(0xFFFBF8F0)
 private val Ink = Color(0xFF1B1F1A)
 private val Moss = Color(0xFF5E6B4F)
 
+/** Цвет отметки о проведении: заметный, но не тревожный. */
+val Conducted = Color(0xFF2E7D32)
+
 private val NightBg = Color(0xFF12150F)
 private val NightCard = Color(0xFF1D2118)
 private val NightInk = Color(0xFFE6E3D6)

@@ -2,6 +2,9 @@ package ru.vzvod.konspekt.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -51,6 +55,7 @@ import ru.vzvod.konspekt.data.Library
 import ru.vzvod.konspekt.data.FileVault
 import ru.vzvod.konspekt.data.ShareLesson
 import ru.vzvod.konspekt.data.Program
+import ru.vzvod.konspekt.ui.theme.Conducted
 import ru.vzvod.konspekt.data.Sources
 import ru.vzvod.konspekt.logic.LessonImport
 import ru.vzvod.konspekt.logic.TextExtract
@@ -246,12 +251,25 @@ fun ArchiveScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val done = item.conductedAt > 0
+                    if (done) {
+                        // Зелёная полоса слева: проведённое видно, не вчитываясь.
+                        Box(
+                            Modifier
+                                .width(4.dp)
+                                .height(46.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.primary,
+                                    RoundedCornerShape(2.dp)
+                                )
+                        )
+                        Spacer(Modifier.width(12.dp))
+                    }
                     Column(Modifier.weight(1f)) {
                         // Заголовок — наименование занятия: у серии по одной теме оно разное.
                         Text(
                             item.lessonTitle.ifBlank { item.topic }.ifBlank { "Без темы" },
                             style = MaterialTheme.typography.titleMedium,
-                            color = if (done) MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (done) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurface,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
@@ -270,11 +288,18 @@ fun ArchiveScreen(
                         Text(
                             "Занятие ${item.lessonNo} · ${Library.byId(item.disciplineId).short} · " +
                                 "${item.minutes} мин · ${fmt.format(Date(item.createdAt))}" +
-                                (if (item.sourceName.isNotBlank()) " · есть оригинал" else "") +
-                                (if (done) " · проведено ${fmt.format(Date(item.conductedAt))}" else ""),
+                                (if (item.sourceName.isNotBlank()) " · есть оригинал" else ""),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        if (done) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "ПРОВЕДЕНО ${fmt.format(Date(item.conductedAt))}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                     ArchiveMenu(
                         onOpen = { onOpen(item) },

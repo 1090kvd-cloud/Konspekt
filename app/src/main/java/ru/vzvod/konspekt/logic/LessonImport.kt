@@ -180,8 +180,34 @@ object LessonImport {
      * Поэтому границы частей ищем по словам «вводная», «основная», «заключительная»,
      * а всё между ними присоединяем к текущей части, а не считаем новым вопросом.
      */
+    /**
+     * Назначение граф определяется по шапке таблицы, а не по их порядку.
+     * Формы различаются: где-то «№ | вопросы | содержание | действия обучаемых»,
+     * где-то «№ | вопросы и содержание | время | действия руководителя».
+     */
+    private data class Columns(val head: Int, val body: Int, val trainee: Int, val minutes: Int)
+
+    private fun columnsOf(header: List<String>): Columns {
+        var head = 1
+        var body = 2
+        var trainee = 3
+        var minutes = -1
+        header.forEachIndexed { i, cell ->
+            val c = cell.lowercase()
+            when {
+                c.contains("врем") -> minutes = i
+                c.contains("действия") -> trainee = i
+                c.contains("содержан") && c.contains("вопрос") -> { head = i; body = i }
+                c.contains("содержан") -> body = i
+                c.contains("вопрос") -> head = i
+            }
+        }
+        return Columns(head, body, trainee, minutes)
+    }
+
     private fun tableRun(rows: List<List<String>>): Run? {
         if (rows.size < 2) return null
+        val cols = columnsOf(rows.first())
 
         data class Acc(var head: String, val body: StringBuilder, val trainee: StringBuilder, var minutes: Int?)
 
@@ -204,9 +230,10 @@ object LessonImport {
 
         rows.forEach { cells ->
             if (cells.size < 3) return@forEach
-            val head = cells.getOrElse(1) { "" }
-            val body = cells.getOrElse(2) { "" }
-            val trainee = cells.getOrElse(3) { "" }
+            val head = cells.getOrElse(cols.head) { "" }
+            val body = cells.getOrElse(cols.body) { "" }
+            val trainee = cells.getOrElse(cols.trainee) { "" }
+            val timeCell = if (cols.minutes >= 0) cells.getOrElse(cols.minutes) { "" } else ""
             if (head.contains("учебные вопросы", true) && body.contains("содержание", true)) return@forEach
 
             val mark = (head + " " + body.lineSequence().firstOrNull().orEmpty()).lowercase()
@@ -232,9 +259,15 @@ object LessonImport {
                     },
                     body = StringBuilder(clean),
                     trainee = StringBuilder(trainee),
-                    minutes = minutesIn(head.lines() + body.lines().take(2))
+                    // Время может стоять своей графой — тогда берём его оттуда.
+                    minutes = minutesIn(listOf(timeCell)) ?: number(timeCell)
+                        ?: minutesIn(head.lines() + body.lines().take(2))
                 )
             } else {
+                // Заключительная часть коротка по смыслу. Всё, что идёт дальше, —
+                // это уже другая таблица документа: перечень документов, ведомости.
+                // Присоединять их к ходу занятия нельзя.
+                if (stage == "outro") return@forEach
                 // Продолжение текущей части: вложенная таблица, перенос строки и т. п.
                 val acc = current ?: return@forEach
                 if (clean.isNotBlank()) {
@@ -356,6 +389,11 @@ object LessonImport {
         }
         return out.filter { it.isNotEmpty() }
     }
+
+    /** Графа времени часто содержит одно число без слова «мин». */
+    private fun number(cell: String): Int? =
+        Regex("^\\s*(\\d{1,3})\\s*$").find(cell.trim())?.groupValues?.get(1)?.toIntOrNull()
+            ?.takeIf { it in 1..600 }
 
     private fun minutesIn(lines: List<String>): Int? = lines
         .firstNotNullOfOrNull { Regex("(\\d{1,3})\\s*мин").find(it)?.groupValues?.get(1) }
