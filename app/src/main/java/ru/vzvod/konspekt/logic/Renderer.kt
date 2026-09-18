@@ -40,7 +40,7 @@ object Renderer {
         appendLine("УТВЕРЖДАЮ")
         appendLine(s.approver.ifBlank { "Командир роты" })
         appendLine("____________________________")
-        appendLine("«____» ______________ 20____ г.")
+        appendLine(dateOf(plan))
         appendLine()
         appendLine("ПЛАН-КОНСПЕКТ")
         appendLine("проведения занятия по ${plan.dative}")
@@ -53,7 +53,7 @@ object Renderer {
         appendLine("ЦЕЛИ:")
         plan.goals.forEachIndexed { k, g -> appendLine("${k + 1}. ${unnumbered(g)}") }
         appendLine()
-        appendLine("Время: ${timeOf(plan)};    ${dateOf(plan)}")
+        appendLine("Время: ${timeOf(plan)}")
         appendLine("Место: ${plan.place}.")
         appendLine("Материальное обеспечение: ${plan.provision.joinToString(", ")}.")
         if (plan.safety.isNotEmpty()) {
@@ -183,7 +183,7 @@ object Renderer {
 
         sb.append("<div class=\"approve\">УТВЕРЖДАЮ\n${esc(s.approver.ifBlank { "Командир роты" })}")
         sb.append("<div class=\"line\"></div><div class=\"line\"></div>")
-        sb.append("«___» ____________ 20___ г.</div>")
+        sb.append("${esc(dateOf(plan))}</div>")
 
         sb.append("<h1>ПЛАН-КОНСПЕКТ</h1>")
         sb.append("<div class=\"sub\">проведения занятия по ${esc(plan.dative)}")
@@ -198,7 +198,7 @@ object Renderer {
             sb.append("<p style=\"text-indent:1.25cm\">${k + 1}. ${esc(unnumbered(g))}</p>")
         }
 
-        sb.append("<p style=\"text-indent:1.25cm\"><span class=\"key\">Время:</span> ${timeOf(plan)};&nbsp;&nbsp;&nbsp;&nbsp;${esc(dateOf(plan))}</p>")
+        sb.append("<p style=\"text-indent:1.25cm\"><span class=\"key\">Время:</span> ${timeOf(plan)}</p>")
         sb.append("<p style=\"text-indent:1.25cm\"><span class=\"key\">Место:</span> ${esc(plan.place)}.</p>")
         sb.append("<p style=\"text-indent:1.25cm\"><span class=\"key\">Материальное обеспечение:</span> ${esc(plan.provision.joinToString(", "))}.</p>")
         if (plan.safety.isNotEmpty()) {

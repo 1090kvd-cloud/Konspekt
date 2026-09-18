@@ -91,7 +91,8 @@ object DocxWriter {
         body.append(p("УТВЕРЖДАЮ", align = "right"))
         body.append(p(s.approver.ifBlank { "Командир роты" }, align = "right"))
         body.append(p("____________________", align = "right"))
-        body.append(p("«___» __________ 20___ г.", align = "right"))
+        // Дата занятия стоит в грифе утверждения, справа сверху — как в форме.
+        body.append(p(i.date.ifBlank { "«___» __________ 20___ г." }, align = "right"))
         body.append(p(""))
 
         body.append(p("ПЛАН-КОНСПЕКТ", bold = true, align = "center"))
@@ -110,10 +111,8 @@ object DocxWriter {
             body.append(p("${n + 1}. ${unnumbered(g)}", ind = 709))
         }
 
-        // Время и дата — разные сведения: между ними точка с запятой, как в образце.
-        val timeText = i.timeLabel.ifBlank { Generator.timeText(i.minutes) }
-        val dateText = i.date.ifBlank { "«___» __________ 20___ г." }
-        body.append(keyValue("Время:", "$timeText;        $dateText"))
+        // В строке «Время» — только время: дата уже стоит в грифе утверждения.
+        body.append(keyValue("Время:", i.timeLabel.ifBlank { Generator.timeText(i.minutes) }))
         body.append(keyValue("Место:", plan.place))
         body.append(keyValue("Материальное обеспечение:", plan.provision.joinToString(", ")))
         if (plan.safety.isNotEmpty()) {

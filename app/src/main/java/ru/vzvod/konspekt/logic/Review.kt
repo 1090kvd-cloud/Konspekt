@@ -32,7 +32,7 @@ object Review {
         val i = plan.input
 
         // --- шапка ---
-        if (i.date.isBlank()) out.add(Note(Level.ERROR, "Не указана дата проведения"))
+        if (i.date.isBlank()) out.add(Note(Level.ERROR, "Не указана дата — в грифе останется пустая линейка"))
         if (i.unitName.ifBlank { s.unitName }.isBlank()) {
             out.add(Note(Level.ERROR, "Не указано подразделение"))
         }
