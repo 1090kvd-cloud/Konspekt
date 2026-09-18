@@ -12,6 +12,13 @@ import android.widget.Toast
 
 object Export {
 
+    /**
+     * Ссылка на страницу, пока система готовит печать.
+     * Без неё сборщик мусора уничтожит WebView до того, как документ уйдёт
+     * в принтер, и печать оборвётся на середине.
+     */
+    private var printView: WebView? = null
+
     /** Кладёт текст в буфер обмена — чтобы вставить в сообщение или заметку. */
     fun copy(context: Context, label: String, text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
