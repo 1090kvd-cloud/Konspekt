@@ -20,8 +20,38 @@ object Renderer {
     }
 
     /** Дата в шапке: введённая руководителем, иначе пустая линейка под запись. */
-    private fun dateOf(plan: LessonPlan): String =
-        plan.input.date.ifBlank { "«___» __________ 20___ г." }
+    private fun dateOf(plan: LessonPlan): String = approvalDate(plan.input.date)
+
+    private val months = listOf(
+        "января", "февраля", "марта", "апреля", "мая", "июня",
+        "июля", "августа", "сентября", "октября", "ноября", "декабря"
+    )
+
+    /**
+     * Ставит дату в графы грифа: «18» сентября 2026 г.
+     *
+     * В форме это не сплошная строка, а бланк с кавычками и линейками, поэтому
+     * число берёт кавычки, месяц и год встают на свои места. Что не разобралось —
+     * остаётся пустой линейкой под запись от руки.
+     */
+    fun approvalDate(raw: String): String {
+        val text = raw.trim()
+        if (text.isEmpty()) return "«___» __________ 20___ г."
+
+        val day = Regex("\\b([0-3]?\\d)\\b").find(text)?.groupValues?.get(1)
+        val monthWord = months.firstOrNull { text.contains(it, ignoreCase = true) }
+            ?: Regex("\\b(0?[1-9]|1[0-2])\\s*[.\\-/]").find(text)?.groupValues?.get(1)
+                ?.toIntOrNull()?.let { months.getOrNull(it - 1) }
+        val year = Regex("\\b(20\\d\\d)\\b").find(text)?.groupValues?.get(1)
+
+        // Ничего не узнали — пусть стоит как ввёл руководитель.
+        if (day == null && monthWord == null && year == null) return text
+
+        val d = day?.padStart(2, ' ') ?: "___"
+        val m = monthWord ?: "__________"
+        val y = year?.removePrefix("20") ?: "___"
+        return "«$d» $m 20$y г."
+    }
 
     /** Время в шапке: своя запись руководителя, иначе — расчётная. */
     fun timeOf(plan: LessonPlan): String =

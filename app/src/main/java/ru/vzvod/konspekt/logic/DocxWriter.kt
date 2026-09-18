@@ -92,7 +92,7 @@ object DocxWriter {
         body.append(p(s.approver.ifBlank { "Командир роты" }, align = "right"))
         body.append(p("____________________", align = "right"))
         // Дата занятия стоит в грифе утверждения, справа сверху — как в форме.
-        body.append(p(i.date.ifBlank { "«___» __________ 20___ г." }, align = "right"))
+        body.append(p(Renderer.approvalDate(i.date), align = "right"))
         body.append(p(""))
 
         body.append(p("ПЛАН-КОНСПЕКТ", bold = true, align = "center"))
