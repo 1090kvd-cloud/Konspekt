@@ -252,7 +252,15 @@ object LessonImport {
         rows.forEach { cells ->
             if (cells.size < 3) return@forEach
             val head = cells.getOrElse(cols.head) { "" }
-            val body = cells.getOrElse(cols.body) { "" }
+            // Вложенные таблицы сбивают нумерацию граф: содержание может
+            // оказаться в соседней колонке. Если в своей графе пусто,
+            // берём самую объёмную ячейку строки — текст не должен пропадать.
+            val ownCell = cells.getOrElse(cols.body) { "" }
+            // Вложенные таблицы сбивают нумерацию граф: в своей может оказаться
+            // огрызок вроде номера строки, а содержание — в соседней.
+            // Берём самую объёмную ячейку, если своя заведомо мала.
+            val widest = cells.maxByOrNull { it.length }.orEmpty()
+            val body = if (ownCell.length >= 40 || widest.length <= 100) ownCell else widest
             val trainee = cells.getOrElse(cols.trainee) { "" }
             val timeCell = if (cols.minutes >= 0) cells.getOrElse(cols.minutes) { "" } else ""
             if (head.contains("учебные вопросы", true) && body.contains("содержание", true)) return@forEach
