@@ -651,7 +651,7 @@ private fun AboutSection() {
         KeyValue("Название", "План-конспект")
         KeyValue("Версия", "1.0")
         KeyValue("Разработчик", "В. Д. Кривицкий")
-        KeyValue("Лицензия", "GNU GPL версии 3")
+        KeyValue("Лицензия", "PolyForm Noncommercial 1.0.0")
         Spacer(Modifier.height(8.dp))
         Text(
             "Свободная программа: её можно использовать, изучать, изменять и передавать " +
