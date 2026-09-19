@@ -79,6 +79,9 @@ object LessonImport {
         val place = afterColon(head, Regex("^Мест[оа]\\b", RegexOption.IGNORE_CASE))
         val timeLine = afterColon(head, Regex("^Врем[яени]+\\b", RegexOption.IGNORE_CASE))
         val provision = afterColon(head, Regex("^Материальн", RegexOption.IGNORE_CASE))
+        // Руководства и пособия в форме идут отдельной строкой, но в документе
+        // приложения это один раздел — материальное обеспечение.
+        val guides = afterColon(head, Regex("^Руководств", RegexOption.IGNORE_CASE))
         val goals = headedBlock(lines, Regex("^ЦЕЛ[ИЬ]\\b", RegexOption.IGNORE_CASE))
         val safety = headedBlock(lines, Regex("^Требования безопасн", RegexOption.IGNORE_CASE))
 
@@ -87,8 +90,9 @@ object LessonImport {
             edits[Generator.Keys.GOALS] = goals.joinToString("\n") { unnumber(it) }
         }
         if (safety.isNotEmpty()) edits[Generator.Keys.SAFETY] = safety.joinToString("\n")
-        if (provision.isNotBlank()) {
-            edits[Generator.Keys.PROVISION] = provision
+        val allProvision = listOf(provision, guides).filter { it.isNotBlank() }.joinToString("; ")
+        if (allProvision.isNotBlank()) {
+            edits[Generator.Keys.PROVISION] = allProvision
                 .split(',', ';')
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
@@ -232,7 +236,7 @@ object LessonImport {
             // В части форм графа «Действия руководителя» несёт и само содержание,
             // а в графе вопросов стоит только название части. Тогда меняем местами,
             // иначе текст занятия ушёл бы в действия обучаемых и потерялся.
-            if (content.length < 40 && trainee.length > 80) {
+            if (content.length < 40 && trainee.length > content.length + 20) {
                 content = trainee
                 trainee = ""
             }
@@ -373,6 +377,36 @@ object LessonImport {
             val m = headRe.find(l) ?: return@forEachIndexed
             val n = m.groupValues[1].toIntOrNull() ?: return@forEachIndexed
             if (n == heads.size + 1 && n <= 6) heads.add(idx to m.groupValues[2].trim())
+        }
+
+        // Нумерации нет — пробуем разложить по подзаголовкам: в конспектах
+        // разделы часто оформлены строкой, оканчивающейся двоеточием.
+        if (heads.isEmpty()) {
+            val subheads = ArrayList<Pair<Int, String>>()
+            body.forEachIndexed { idx, line ->
+                val l = line.trim()
+                val next = body.getOrNull(idx + 1)?.trim().orEmpty()
+                val isSubhead = l.length in 6..95 &&
+                    l.endsWith(':') &&
+                    l.count { it == '.' } <= 1 &&
+                    // Следующая строка должна быть текстом, а не ещё одним
+                    // заголовком: иначе получится пустой учебный вопрос.
+                    next.length > 40 && !next.endsWith(':')
+                if (isSubhead) subheads.add(idx to l.trimEnd(':').trim())
+            }
+            // Один раздел делить незачем, а больше шести — дробление не по делу.
+            if (subheads.size in 2..6) {
+                // Текст до первого заголовка — общее вступление, оно идёт
+                // в первый вопрос, иначе просто пропало бы.
+                val lead = body.subList(0, subheads.first().first)
+                return subheads.mapIndexed { i, (at, title) ->
+                    val to = if (i + 1 < subheads.size) subheads[i + 1].first else body.size
+                    val chunk = if (i == 0) lead + body.subList(at + 1, to)
+                    else body.subList(at + 1, to)
+                    val (content, trainee) = divide(chunk)
+                    Part(title, content, null, trainee)
+                }
+            }
         }
 
         if (heads.isEmpty()) {

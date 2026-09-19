@@ -58,7 +58,6 @@ import androidx.compose.ui.unit.dp
 import ru.vzvod.konspekt.data.Materials
 import ru.vzvod.konspekt.data.ShareLesson
 import ru.vzvod.konspekt.data.Sources
-import ru.vzvod.konspekt.logic.DocxRewrite
 import ru.vzvod.konspekt.logic.DocxImages
 import ru.vzvod.konspekt.logic.DocxWriter
 import ru.vzvod.konspekt.logic.Renderer
@@ -104,13 +103,11 @@ fun ResultScreen(
     ) { uri ->
         if (uri != null) {
             runCatching {
-                val source = Sources.file(context, plan.input.sourceName)
                 context.contentResolver.openOutputStream(uri)?.use { out ->
-                    // У загруженного конспекта своя вёрстка, таблицы и рисунки:
-                    // правим его копию, а не собираем документ заново.
-                    val done = source != null &&
-                        DocxRewrite.rewrite(source, out, plan, settings).ok
-                    if (!done) DocxWriter.write(out, plan, settings, context)
+                    // Всегда собираем документ в форме приложения: шапка, цели,
+                    // таблица хода занятия, рисунки в своих ячейках. Исходник
+                    // остаётся доступен отдельной кнопкой «Оригинал».
+                    DocxWriter.write(out, plan, settings, context)
                 }
             }
         }
